@@ -30,6 +30,21 @@ class TestBrreg(unittest.TestCase):
         called_url = mocked.call_args.args[0]
         self.assertIn("organisasjonsnummer=123456789", called_url)
 
+    def test_batch_follows_pages_and_sets_size(self) -> None:
+        page0 = {"_embedded": {"enheter": [{"organisasjonsnummer": "111111111"}]},
+                 "page": {"totalPages": 2}}
+        page1 = {"_embedded": {"enheter": [{"organisasjonsnummer": "222222222"}]},
+                 "page": {"totalPages": 2}}
+        with patch("signalpost.brreg.JsonHttpClient.get_json") as mocked:
+            mocked.side_effect = [
+                JsonResponse(200, "u0", page0),
+                JsonResponse(200, "u1", page1),
+            ]
+            result = self.client.get_entities(["111111111", "222222222"])
+        self.assertEqual(set(result), {"111111111", "222222222"})
+        self.assertIn("size=2", mocked.call_args_list[0].args[0])
+        self.assertIn("page=1", mocked.call_args_list[1].args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,38 +29,57 @@ class BrregClient:
         return digits
 
 
+    def entity_url(self, orgnr: str) -> str:
+        return f"{self._base_url}/enheter/{quote(self.normalize_orgnr(orgnr))}"
+
     def get_entities(self, orgnrs: list[str]) -> dict[str, dict]:
         """Batch-fetch entities using BRREG's organisation-number query.
 
         BRREG documents a maximum of 2,000 organisation numbers per query.
-        The runner can therefore process arbitrary N by chunking inputs.
+        The search endpoint is paginated, so `size` is set to the chunk size
+        and any further pages reported by the response are followed. Numbers
+        BRREG does not return are simply absent from the result; callers must
+        decide how to resolve them (the runner falls back to a direct lookup).
         """
-        normalized = [self.normalize_orgnr(value) for value in orgnrs]
+        normalized = list(dict.fromkeys(self.normalize_orgnr(v) for v in orgnrs))
         entities: dict[str, dict] = {}
         for start in range(0, len(normalized), 2000):
             chunk = normalized[start:start + 2000]
-            query = urlencode({"organisasjonsnummer": ",".join(chunk)})
-            url = f"{self._base_url}/enheter?{query}"
-            try:
-                response = self._http.get_json(url)
-            except HttpClientError as exc:
-                if exc.status_code in {404, 410}:
-                    continue
-                if exc.status_code in {401, 403}:
-                    raise BrregBlocked(str(exc)) from exc
-                raise
-            payload = response.payload
-            if not isinstance(payload, dict):
-                raise ValueError("BRREG batch search returned a non-object payload")
-            embedded = payload.get("_embedded", {})
-            rows = embedded.get("enheter", []) if isinstance(embedded, dict) else []
-            if not isinstance(rows, list):
-                raise ValueError("BRREG batch search returned an invalid entity list")
-            for row in rows:
-                if isinstance(row, dict):
-                    key = row.get("organisasjonsnummer")
-                    if key is not None:
-                        entities[str(key).zfill(9)] = row
+            page = 0
+            while True:
+                query = urlencode(
+                    {
+                        "organisasjonsnummer": ",".join(chunk),
+                        "size": len(chunk),
+                        "page": page,
+                    }
+                )
+                url = f"{self._base_url}/enheter?{query}"
+                try:
+                    response = self._http.get_json(url)
+                except HttpClientError as exc:
+                    if exc.status_code in {404, 410}:
+                        break
+                    if exc.status_code in {401, 403}:
+                        raise BrregBlocked(str(exc)) from exc
+                    raise
+                payload = response.payload
+                if not isinstance(payload, dict):
+                    raise ValueError("BRREG batch search returned a non-object payload")
+                embedded = payload.get("_embedded", {})
+                rows = embedded.get("enheter", []) if isinstance(embedded, dict) else []
+                if not isinstance(rows, list):
+                    raise ValueError("BRREG batch search returned an invalid entity list")
+                for row in rows:
+                    if isinstance(row, dict):
+                        key = row.get("organisasjonsnummer")
+                        if key is not None:
+                            entities[str(key).zfill(9)] = row
+                page_info = payload.get("page", {})
+                total_pages = page_info.get("totalPages", 1) if isinstance(page_info, dict) else 1
+                page += 1
+                if not isinstance(total_pages, int) or page >= total_pages or not rows:
+                    break
         return entities
 
     def get_entity(self, orgnr: str) -> tuple[dict, str]:

@@ -78,7 +78,11 @@ class SignalpostRunner:
         )
         self._max_concurrency = settings.max_concurrency
 
-    def process_one(self, raw_orgnr: str) -> CompanyResult:
+    def process_one(
+        self,
+        raw_orgnr: str,
+        prefetched: tuple[dict, str] | None = None,
+    ) -> CompanyResult:
         try:
             orgnr = self._brreg.normalize_orgnr(raw_orgnr)
         except ValueError as exc:
@@ -90,7 +94,10 @@ class SignalpostRunner:
             )
 
         try:
-            payload, source_url = self._brreg.get_entity(orgnr)
+            if prefetched is not None:
+                payload, source_url = prefetched
+            else:
+                payload, source_url = self._brreg.get_entity(orgnr)
             if not exact_entity_match(orgnr, payload):
                 return CompanyResult(
                     organisation_number=orgnr,
@@ -144,15 +151,47 @@ class SignalpostRunner:
                 run_id=self._run_id,
             )
 
+    def _prefetch(self, inputs: list[str]) -> dict[str, tuple[dict, str]]:
+        """Batch-fetch all valid organisation numbers in as few requests as possible.
+
+        Any failure here is non-fatal: affected companies are resolved by the
+        per-company direct lookup in process_one, so one result per input is
+        still guaranteed.
+        """
+        valid: list[str] = []
+        for raw in inputs:
+            try:
+                valid.append(self._brreg.normalize_orgnr(raw))
+            except ValueError:
+                continue
+        if not valid:
+            return {}
+        try:
+            entities = self._brreg.get_entities(valid)
+        except Exception:
+            return {}
+        return {
+            orgnr: (payload, self._brreg.entity_url(orgnr))
+            for orgnr, payload in entities.items()
+        }
+
     def run(self, organisation_numbers: Iterable[str]) -> list[CompanyResult]:
         inputs = list(organisation_numbers)
         results: list[CompanyResult | None] = [None] * len(inputs)
+        prefetched = self._prefetch(inputs)
+
+        def work(raw: str) -> CompanyResult:
+            try:
+                key = self._brreg.normalize_orgnr(raw)
+            except ValueError:
+                key = None
+            return self.process_one(raw, prefetched.get(key) if key else None)
 
         # Bounded concurrency is intentionally configurable. The code does not
         # assume Builderr's evaluator CPU/RAM specification.
         with concurrent.futures.ThreadPoolExecutor(max_workers=self._max_concurrency) as pool:
             futures = {
-                pool.submit(self.process_one, raw): index
+                pool.submit(work, raw): index
                 for index, raw in enumerate(inputs)
             }
             for future in concurrent.futures.as_completed(futures):
