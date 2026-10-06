@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Signalpost run output
+output/
+smoke_input.txt
+smoke_output.jsonl
