@@ -1,2 +1,0 @@
-# One Norwegian organisation number per line.
-123456789

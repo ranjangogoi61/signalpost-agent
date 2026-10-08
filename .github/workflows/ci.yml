@@ -1,0 +1,49 @@
+name: ci
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  test-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: uv sync --frozen
+      - name: Unit tests
+        run: uv run --with pytest pytest -q
+      - name: Select 100-company smoke batch
+        run: |
+          curl -fsSL https://builderr.ai/signalpost-company-universe-2025.jsonl.gz -o universe.jsonl.gz
+          uv run python select_entry_batch.py --universe universe.jsonl.gz --count 100 --output smoke-companies.jsonl
+      - name: Live 100-company smoke run
+        run: |
+          uv run python scripts/run_signalpost.py \
+            --organisations smoke-companies.jsonl \
+            --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
+            --report out/run-report.json --run-id ci-smoke --expected-count 100
+      - name: Refresh run (same input, must report no false changes)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          uv run python scripts/run_signalpost.py \
+            --organisations smoke-companies.jsonl \
+            --output out/envelopes2.jsonl --profiles-output out/profiles.jsonl \
+            --report out/run-report2.json --run-id ci-smoke-2 --expected-count 100
+      - name: Summarize (counts only)
+        if: always()
+        run: |
+          uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/summary.json
+      - name: Publish counts-only summary to smoke-results branch
+        if: always()
+        run: |
+          mkdir -p /tmp/results && cp out/summary.json out/run-report.json /tmp/results/ 2>/dev/null || true
+          git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
+          git checkout --orphan smoke-results && git rm -rf -q . 2>/dev/null || true
+          cp /tmp/results/* . && git add summary.json run-report.json && git commit -q -m "smoke results for ${GITHUB_SHA::7}"
+          git push -f origin smoke-results

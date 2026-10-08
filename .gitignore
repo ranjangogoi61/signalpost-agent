@@ -223,3 +223,9 @@ __marimo__/
 output/
 smoke_input.txt
 smoke_output.jsonl
+
+# Signalpost run output
+out/
+smoke-companies.jsonl
+universe.jsonl.gz
+brreg-enheter.csv

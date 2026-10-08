@@ -1,56 +1,44 @@
-# Signalpost Agent — v0.1
+# signalpost-agent
 
-First vertical slice for the Builderr Signalpost challenge.
+Evidence-first agent for Builderr's Signalpost challenge. Give it Norwegian organisation numbers; it returns exactly one terminal envelope per input, with a source, retrieval time and content hash for every published fact and one of six availability states (`available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`) for everything else.
 
-## What is implemented
+Built on Builderr's published reference agent (`src/norway_company_agent`, kept as the base) with a hardened runner added in `src/norway_company_agent/signalpost_run.py`. The reference kit's connector experiments are kept unchanged for reference only; the official command below imports none of them and sends no request to those services.
 
-- Arbitrary number of Norwegian organisation numbers.
-- BRREG Enhetsregisteret as the identity anchor.
-- Exact organisation-number matching before publication.
-- BRREG direct entity lookup.
-- BRREG batch lookup in chunks of up to 2,000 organisation numbers.
-- Evidence attached to every published fact: source URL, retrieval timestamp, effective date when available, content hash, extraction method.
-- Exactly one terminal result per input.
-- Signalpost terminal states: `available`, `not_available`, `blocked`, `not_applicable`, `ambiguous`, `failed`.
-- Configurable request/runtime/concurrency limits.
-- No fixed 100/1,000/1,100/1,200-company assumption.
-- Standard-library-only runtime dependency.
-
-## Run directly
-
-No package installation is required for the current slice:
+## Run command
 
 ```bash
-python run.py --input input.sample.txt --output output/results.jsonl
+uv sync --frozen && uv run python scripts/run_signalpost.py \
+  --organisations <batch.jsonl|.json|.txt> \
+  --output out/envelopes.jsonl \
+  --profiles-output out/profiles.jsonl \
+  --report out/run-report.json \
+  --run-id <id> \
+  --expected-count <N>
 ```
 
-Optional environment controls:
+* `--bulk <brreg-enheter.csv>` is optional. Without it the identity anchor is the live BRREG register (chunked organisation-number query, direct lookup only for numbers the query does not return).
+* Refresh: run again with the same `--profiles-output`, or pass `--previous <earlier profiles.jsonl>`; material changes are written to each envelope's `changes`.
+* Budget (retries and redirects count): `--max-requests-per-100` (default 1900) and `--max-seconds-per-100` (default 2400) per 100 companies. When the budget is nearly used the optional website phase is skipped and marked `failed` (`budget_exhausted`); the official registry phase always runs first.
+* Company count is never assumed: the agent processes whatever batch it is given.
 
-```text
-SIGNALPOST_MAX_CONCURRENCY
-SIGNALPOST_HTTP_TIMEOUT
-SIGNALPOST_MAX_REQUESTS
-SIGNALPOST_MAX_RUNTIME_SECONDS
-SIGNALPOST_BRREG_BASE_URL
-```
+## What it publishes
 
-Exact Builderr runtime/request/cost values are intentionally not hard-coded until the organizer confirms them.
+Official sources only for facts: BRREG entity register, roles (dates of birth discarded), subunits, group links and Regnskapsregisteret accounts. A company website is published only when it is verified as the exact legal entity; otherwise the claim is `ambiguous` and carries no value. No LinkedIn, Meta or Indeed collection; no search-engine scraping; no paid APIs; no LLM calls. Third-party cost per run: $0.
+
+## Rules enforced by tests
+
+* exactly one envelope per input row, in input order, for invalid, duplicate, unknown or deleted numbers;
+* only the six availability states; no value on an unavailable claim; every available claim cites evidence with a content hash;
+* unverified website is `ambiguous`; request/time guard cannot be exceeded;
+* refresh reports changes and no false changes.
 
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -v
+uv run --with pytest pytest -q
 ```
 
-A GitHub Actions workflow also runs the unit suite and a live BRREG smoke test using a public company organisation number.
+## Declarations
 
-## Architecture boundary
-
-This is **not yet the final Builderr submission schema** and does not yet implement all permitted enrichment sources. The goal of v0.1 is to establish the evaluator-safe batch/result/evidence foundation.
-
-Future source connectors should plug into the same evidence and result model.
-
-## Official references
-
-- Builderr Signalpost: https://builderr.ai/challenges/signalpost
-- BRREG Enhetsregisteret API: https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html
+* Models/APIs: none (no LLM). Sources: data.brreg.no (NLOD 2.0) and the company's own registry-linked website, subject to robots.txt.
+* Expected third-party cost per 100-company run: $0.
