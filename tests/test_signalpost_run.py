@@ -67,10 +67,10 @@ def rows_for(*raw):
     return out
 
 
-def run(raw, *, api=None, site=site_ok, budget=None, previous=None, workers=1, discovery=None):
+def run(raw, *, api=None, site=site_ok, budget=None, previous=None, workers=1, discovery=None, reverify=None):
     api = api or FakeApi()
     budget = budget or Budget(10_000, 10_000)
-    envelopes, profiles, report = run_batch(rows_for(*raw), run_id="t", modules=MODULES, budget=budget, previous=previous, workers=workers, fetcher=api, site_fetcher=site, discovery_fetcher=discovery)
+    envelopes, profiles, report = run_batch(rows_for(*raw), run_id="t", modules=MODULES, budget=budget, previous=previous, workers=workers, fetcher=api, site_fetcher=site, discovery_fetcher=discovery, reverifier=reverify)
     return envelopes, profiles, report, api
 
 
@@ -115,7 +115,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(direct, [])
 
     def test_missing_bulk_file_falls_back_to_live(self):
-        envelopes, _, report = run_batch(rows_for("923609016"), run_id="t", modules=MODULES, budget=Budget(1000, 1000), bulk_path="/does/not/exist.csv", workers=1, fetcher=FakeApi(), site_fetcher=site_ok, discovery_fetcher=None)
+        envelopes, _, report = run_batch(rows_for("923609016"), run_id="t", modules=MODULES, budget=Budget(1000, 1000), bulk_path="/does/not/exist.csv", workers=1, fetcher=FakeApi(), site_fetcher=site_ok, discovery_fetcher=None, reverifier=None)
         self.assertEqual(envelopes[0]["modules"]["registry"]["availability"], "available")
         self.assertFalse(report["registry_anchor"]["bulk_used"] and report["registry_anchor"]["from_bulk"])
 
@@ -248,6 +248,40 @@ class DiscoveryIntegrationTests(unittest.TestCase):
         envelopes, _, report, _ = run(["914778271", "923609016"], discovery=boom)
         self.assertEqual(len(envelopes), 2)
         self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "failed")
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+
+
+class ReverifyIntegrationTests(unittest.TestCase):
+    def test_unverified_registry_website_is_upgraded_when_footer_prints_org_number(self):
+        from norway_company_agent.domain_discovery import reverify_registry_website
+
+        fetch = lambda url: {"ok": True, "url": url, "final_url": url, "html": "<footer>Org.nr 923 609 016</footer>", "requests": 2, "bytes": 30, "latency_ms": 4}
+        envelopes, _, report, _ = run(["923609016"], site=site_wrong, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=fetch))
+        claim = next(c for c in envelopes[0]["claims"] if c["field"] == "official_website")
+        self.assertEqual(claim["availability"], "available")
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+
+    def test_registry_website_stays_ambiguous_without_the_number(self):
+        from norway_company_agent.domain_discovery import reverify_registry_website
+
+        fetch = lambda url: {"ok": True, "url": url, "final_url": url, "html": "<p>Shoes for sale</p>", "requests": 2, "bytes": 20, "latency_ms": 4}
+        envelopes, _, _, _ = run(["923609016"], site=site_wrong, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=fetch))
+        self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "ambiguous")
+
+    def test_already_verified_website_is_not_refetched(self):
+        from norway_company_agent.domain_discovery import reverify_registry_website
+
+        calls = []
+        fetch = lambda url: calls.append(url) or {"ok": False, "requests": 1}
+        run(["923609016"], site=site_ok, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=fetch))
+        self.assertEqual(calls, [])
+
+    def test_reverify_failure_cannot_break_or_downgrade(self):
+        def boom(p, r):
+            raise RuntimeError("network down")
+
+        envelopes, _, report, _ = run(["923609016"], site=site_wrong, reverify=boom)
+        self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "ambiguous")
         self.assertTrue(report["validation"]["passed"], report["validation"])
 
 

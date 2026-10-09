@@ -34,7 +34,7 @@ from .official import (
     fetch_official_modules,
 )
 from .refresh import diff_profile
-from .domain_discovery import discover_website
+from .domain_discovery import discover_website, reverify_registry_website
 from .sampling import iter_bulk
 from .website import fetch_website
 
@@ -283,6 +283,7 @@ def _website_phase(
     site_fetcher: Callable[..., tuple[dict, dict]],
     discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = None,
     discovery_soft_limit: float = 0.7,
+    reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = None,
 ) -> dict[str, Any]:
     url = profile.get("website")
     empty = {"requests": 0, "bytes": 0, "latencies_ms": []}
@@ -304,7 +305,18 @@ def _website_phase(
         return {**metrics, "discovery": True}
     try:
         record, metrics = site_fetcher(url)
-        profile["evidence"]["website"] = apply_website_identity_gate(profile, record)["website"]
+        gated = apply_website_identity_gate(profile, record)["website"]
+        if reverifier is not None and gated.get("status") == "available" and budget.fraction_used() < discovery_soft_limit:
+            try:
+                gated, extra = reverifier(profile, gated)
+            except Exception:
+                extra = {}
+            metrics = {
+                "requests": metrics.get("requests", 0) + extra.get("requests", 0),
+                "bytes": metrics.get("bytes", 0) + extra.get("bytes", 0),
+                "latencies_ms": list(metrics.get("latencies_ms", [])) + list(extra.get("latencies_ms", [])),
+            }
+        profile["evidence"]["website"] = gated
     except Exception as exc:
         profile["evidence"]["website"] = evidence("website", "source_error", "registry_linked_company_website", str(url or ""), note=f"{type(exc).__name__}: {str(exc)[:160]}")
         return empty
@@ -446,6 +458,7 @@ def run_batch(
     site_fetcher: Callable[..., tuple[dict, dict]] = fetch_website,
     discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = discover_website,
     discovery_soft_limit: float = 0.7,
+    reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = reverify_registry_website,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     started_at = utc_now()
     t0 = time.monotonic()
@@ -465,7 +478,7 @@ def run_batch(
         profile = profiles[org]
         if "website" not in module_set or profile.get("anchor") == "none":
             return
-        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher, discovery_fetcher, discovery_soft_limit)
+        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher, discovery_fetcher, discovery_soft_limit, reverifier)
         operations["requests_by_phase"]["discovery" if metric.get("discovery") else "website"] += metric["requests"]
         operations["bytes"] += metric["bytes"]
         operations["latencies_ms"].extend(metric["latencies_ms"])

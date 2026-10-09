@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from norway_company_agent.domain_discovery import discover_website  # noqa: E402
+from norway_company_agent.domain_discovery import discover_website, reverify_registry_website  # noqa: E402
 from norway_company_agent.signalpost_run import Budget, read_rows, run_batch  # noqa: E402
 
 DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,roles,group,locations,website"
@@ -62,6 +62,7 @@ def main() -> None:
         envelopes, profiles, report = run_batch(
             rows, run_id=args.run_id, modules=modules, budget=budget, bulk_path=args.bulk, previous=previous, workers=args.workers,
             discovery_fetcher=None if args.no_discovery else discover_website,
+            reverifier=None if args.no_discovery else reverify_registry_website,
         )
     finally:
         uninstall()

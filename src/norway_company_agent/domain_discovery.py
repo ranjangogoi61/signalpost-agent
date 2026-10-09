@@ -201,6 +201,16 @@ def discover_website(
     if record.get("status") != "available":
         record["note"] = f"{record.get('note') or ''} Exact organisation number was printed on {verified['page_url']} but the full crawl failed.".strip()
         return record, metrics
+    gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=METHOD)
+    gated["value"]["discovery"] = {"method": METHOD, "candidates": tried, "verified_on": verified["page_url"]}
+    gated["source_type"] = "company_website_discovered_by_exact_org_number"
+    gated["note"] = "Company-controlled page found without a registry link; published only because it prints the exact organisation number. Not an official registry fact."
+    return gated, metrics
+
+
+def mark_verified_by_org_number(profile: dict[str, Any], record: dict[str, Any], page_url: str, *, method: str) -> dict[str, Any]:
+    """Mark a fetched website as the exact legal entity because it prints the organisation number."""
+    org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
     gated = apply_website_identity_gate(profile, record)["website"]
     value = gated.get("value") or {}
     value["identity_assessment"] = {
@@ -209,14 +219,45 @@ def discover_website(
         "publishable": True,
         "legal_name_tokens": name_tokens(str(profile.get("name") or "")),
         "matched_tokens": [],
-        "reasons": [f"exact organisation number {org} is printed on {verified['page_url']}"],
-        "method": METHOD,
+        "reasons": [f"exact organisation number {org} is printed on {page_url}"],
+        "method": method,
     }
     assessments = [assess_social_identity(profile, link) for link in value.get("discovered_social_links") or []]
     value["social_link_assessments"] = assessments
     value["social_links"] = [{"platform": a["platform"], "url": a["url"]} for a in assessments if a["publishable"]]
-    value["discovery"] = {"method": METHOD, "candidates": tried, "verified_on": verified["page_url"]}
     gated["value"] = value
-    gated["source_type"] = "company_website_discovered_by_exact_org_number"
-    gated["note"] = "Company-controlled page found without a registry link; published only because it prints the exact organisation number. Not an official registry fact."
-    return gated, metrics
+    return gated
+
+
+REGISTRY_METHOD = "registry_website_exact_org_number_v1"
+
+
+def reverify_registry_website(
+    profile: dict[str, Any],
+    record: dict[str, Any],
+    *,
+    fetch_page: Callable[[str], dict[str, Any]] = default_fetch_page,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Second look at a registry-linked website the name-based gate left unverified.
+
+    The kit's gate reads boilerplate-stripped text, which usually drops the footer where the
+    organisation number is printed. This re-checks the raw homepage and at most two contact
+    pages for the exact number. It can only upgrade a record, never downgrade it.
+    """
+    metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
+    value = record.get("value") or {}
+    if record.get("status") != "available" or (value.get("identity_assessment") or {}).get("publishable"):
+        return record, metrics
+    host = urllib.parse.urlparse(value.get("final_url") or "").hostname
+    org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
+    if not host or len(org) != 9:
+        return record, metrics
+    result = verify_host(host, org, fetch_page)
+    metrics["requests"] += result["stats"]["requests"]
+    metrics["bytes"] += result["stats"]["bytes"]
+    metrics["latencies_ms"].extend(result["stats"]["latencies_ms"])
+    if not result["verified"]:
+        return record, metrics
+    upgraded = mark_verified_by_org_number(profile, record, result["page_url"], method=REGISTRY_METHOD)
+    upgraded["value"]["reverified_by"] = {"method": REGISTRY_METHOD, "verified_on": result["page_url"]}
+    return upgraded, metrics
