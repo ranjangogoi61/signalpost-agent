@@ -29,7 +29,7 @@ jobs:
             --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
             --report out/run-report.json --run-id ci-smoke --expected-count 100
       - name: Refresh run (same input, must report no false changes)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dev'
         run: |
           uv run python scripts/run_signalpost.py \
             --organisations smoke-companies.jsonl \
