@@ -34,6 +34,7 @@ from .official import (
     fetch_official_modules,
 )
 from .refresh import diff_profile
+from .domain_discovery import discover_website
 from .sampling import iter_bulk
 from .website import fetch_website
 
@@ -275,17 +276,38 @@ def _add_metrics(profile: dict[str, Any], requests: int) -> None:
     metrics["requests"] = int(metrics.get("requests", 0)) + int(requests)
 
 
-def _website_phase(profile: dict[str, Any], budget: Budget, soft_limit: float, site_fetcher: Callable[..., tuple[dict, dict]]) -> dict[str, Any]:
+def _website_phase(
+    profile: dict[str, Any],
+    budget: Budget,
+    soft_limit: float,
+    site_fetcher: Callable[..., tuple[dict, dict]],
+    discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = None,
+    discovery_soft_limit: float = 0.7,
+) -> dict[str, Any]:
     url = profile.get("website")
+    empty = {"requests": 0, "bytes": 0, "latencies_ms": []}
     if budget.fraction_used() >= soft_limit:
         _mark_budget(profile, "website", str(url or BRREG_ENTITY.format(org=profile["organisation_number"])))
-        return {"requests": 0, "bytes": 0, "latencies_ms": []}
+        return empty
+    if not url and discovery_fetcher is not None:
+        if budget.fraction_used() >= discovery_soft_limit:
+            profile["evidence"]["website"] = evidence("website", "not_found", "domain_discovery", BRREG_ENTITY.format(org=profile["organisation_number"]), note="No registry website; domain discovery skipped to protect the request budget")
+            return empty
+        try:
+            record, metrics = discovery_fetcher(profile)
+        except Exception as exc:
+            profile["evidence"]["website"] = evidence("website", "source_error", "domain_discovery", BRREG_ENTITY.format(org=profile["organisation_number"]), note=f"{type(exc).__name__}: {str(exc)[:160]}")
+            return empty
+        profile["evidence"]["website"] = record
+        profile["discovery"] = {"candidates_tried": metrics.get("candidates_tried", 0), "verified": bool(metrics.get("verified"))}
+        _add_metrics(profile, metrics.get("requests", 0))
+        return {**metrics, "discovery": True}
     try:
         record, metrics = site_fetcher(url)
         profile["evidence"]["website"] = apply_website_identity_gate(profile, record)["website"]
     except Exception as exc:
         profile["evidence"]["website"] = evidence("website", "source_error", "registry_linked_company_website", str(url or ""), note=f"{type(exc).__name__}: {str(exc)[:160]}")
-        return {"requests": 0, "bytes": 0, "latencies_ms": []}
+        return empty
     _add_metrics(profile, metrics.get("requests", 0))
     return metrics
 
@@ -422,6 +444,8 @@ def run_batch(
     website_soft_limit: float = 0.85,
     fetcher: Callable[[str], FetchResult] = fetch_json,
     site_fetcher: Callable[..., tuple[dict, dict]] = fetch_website,
+    discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = discover_website,
+    discovery_soft_limit: float = 0.7,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     started_at = utc_now()
     t0 = time.monotonic()
@@ -441,8 +465,8 @@ def run_batch(
         profile = profiles[org]
         if "website" not in module_set or profile.get("anchor") == "none":
             return
-        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher)
-        operations["requests_by_phase"]["website"] += metric["requests"]
+        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher, discovery_fetcher, discovery_soft_limit)
+        operations["requests_by_phase"]["discovery" if metric.get("discovery") else "website"] += metric["requests"]
         operations["bytes"] += metric["bytes"]
         operations["latencies_ms"].extend(metric["latencies_ms"])
 
@@ -500,6 +524,11 @@ def run_batch(
             "third_party_cost_usd": 0,
         },
         "budget": {"max_requests": budget.max_requests, "max_seconds": budget.max_seconds, "exhausted": budget.exhausted()},
+        "discovery": {
+            "attempted": sum(1 for p in profiles.values() if p.get("discovery")),
+            "verified": sum(1 for p in profiles.values() if (p.get("discovery") or {}).get("verified")),
+            "method": "domain_guess_exact_org_number_v1",
+        },
         "availability_totals": {state: totals.get(state, 0) for state in AVAILABILITY_STATES},
         "validation": validate(rows, envelopes),
     }

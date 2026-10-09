@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from norway_company_agent.domain_discovery import discover_website  # noqa: E402
 from norway_company_agent.signalpost_run import Budget, read_rows, run_batch  # noqa: E402
 
 DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,roles,group,locations,website"
@@ -46,6 +47,7 @@ def main() -> None:
     parser.add_argument("--max-requests-per-100", type=int, default=1900, help="Outbound request cap per 100 companies, retries and redirects included")
     parser.add_argument("--max-seconds-per-100", type=int, default=2400, help="Wall-clock cap per 100 companies")
     parser.add_argument("--modules", default=DEFAULT_MODULES)
+    parser.add_argument("--no-discovery", action="store_true", help="Do not look for websites of companies whose registry record has none")
     args = parser.parse_args()
 
     rows = read_rows(args.organisations)
@@ -59,6 +61,7 @@ def main() -> None:
         modules = [item.strip() for item in args.modules.split(",") if item.strip()]
         envelopes, profiles, report = run_batch(
             rows, run_id=args.run_id, modules=modules, budget=budget, bulk_path=args.bulk, previous=previous, workers=args.workers,
+            discovery_fetcher=None if args.no_discovery else discover_website,
         )
     finally:
         uninstall()
@@ -69,7 +72,7 @@ def main() -> None:
     write_jsonl(Path(args.output), envelopes)
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({k: report[k] for k in ("run_id", "expected_count", "emitted_envelopes", "operations", "availability_totals", "validation")}, ensure_ascii=False, indent=2))
+    print(json.dumps({k: report[k] for k in ("run_id", "expected_count", "emitted_envelopes", "operations", "discovery", "availability_totals", "validation")}, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["validation"]["passed"] else 1)
 
 

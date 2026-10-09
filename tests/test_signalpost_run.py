@@ -67,10 +67,10 @@ def rows_for(*raw):
     return out
 
 
-def run(raw, *, api=None, site=site_ok, budget=None, previous=None, workers=1):
+def run(raw, *, api=None, site=site_ok, budget=None, previous=None, workers=1, discovery=None):
     api = api or FakeApi()
     budget = budget or Budget(10_000, 10_000)
-    envelopes, profiles, report = run_batch(rows_for(*raw), run_id="t", modules=MODULES, budget=budget, previous=previous, workers=workers, fetcher=api, site_fetcher=site)
+    envelopes, profiles, report = run_batch(rows_for(*raw), run_id="t", modules=MODULES, budget=budget, previous=previous, workers=workers, fetcher=api, site_fetcher=site, discovery_fetcher=discovery)
     return envelopes, profiles, report, api
 
 
@@ -115,7 +115,7 @@ class AnchorTests(unittest.TestCase):
         self.assertEqual(direct, [])
 
     def test_missing_bulk_file_falls_back_to_live(self):
-        envelopes, _, report = run_batch(rows_for("923609016"), run_id="t", modules=MODULES, budget=Budget(1000, 1000), bulk_path="/does/not/exist.csv", workers=1, fetcher=FakeApi(), site_fetcher=site_ok)
+        envelopes, _, report = run_batch(rows_for("923609016"), run_id="t", modules=MODULES, budget=Budget(1000, 1000), bulk_path="/does/not/exist.csv", workers=1, fetcher=FakeApi(), site_fetcher=site_ok, discovery_fetcher=None)
         self.assertEqual(envelopes[0]["modules"]["registry"]["availability"], "available")
         self.assertFalse(report["registry_anchor"]["bulk_used"] and report["registry_anchor"]["from_bulk"])
 
@@ -199,6 +199,56 @@ class RefreshAndInputTests(unittest.TestCase):
             path.write_text('{"organisation_number":"923 609 016"}\nnot json\n{"organisation_number":"12"}\n', encoding="utf-8")
             rows = read_rows(path)
         self.assertEqual([r["organisation_number"] for r in rows], ["923609016", None, None])
+
+
+class DiscoveryIntegrationTests(unittest.TestCase):
+    @staticmethod
+    def found(profile):
+        record = evidence("website", "available", "company_website_discovered_by_exact_org_number", "https://norskkaffe.no/", value={"final_url": "https://norskkaffe.no/", "title": "Norsk Kaffe", "social_links": [], "identity_assessment": {"publishable": True, "score": 1.0, "status": "exact", "method": "domain_guess_exact_org_number_v1"}}, content_sha256="9" * 64)
+        return record, {"requests": 5, "bytes": 50, "latencies_ms": [5], "candidates_tried": 1, "verified": True}
+
+    @staticmethod
+    def missed(profile):
+        return evidence("website", "not_found", "domain_discovery", "https://data.brreg.no/x", note="none verified"), {"requests": 2, "bytes": 0, "latencies_ms": [], "candidates_tried": 1, "verified": False}
+
+    def test_company_without_registry_website_is_discovered_and_cited(self):
+        envelopes, _, report, _ = run(["914778271"], discovery=self.found)
+        claim = next(c for c in envelopes[0]["claims"] if c["field"] == "official_website")
+        self.assertEqual(claim["availability"], "available")
+        self.assertEqual(claim["value"], "https://norskkaffe.no/")
+        self.assertTrue(claim["evidence_ids"])
+        self.assertEqual(report["discovery"], {"attempted": 1, "verified": 1, "method": "domain_guess_exact_org_number_v1"})
+        self.assertEqual(report["operations"]["requests_by_phase"]["discovery"], 5)
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+
+    def test_undiscovered_website_is_not_available_with_no_value(self):
+        envelopes, _, _, _ = run(["914778271"], discovery=self.missed)
+        claim = next(c for c in envelopes[0]["claims"] if c["field"] == "official_website")
+        self.assertEqual(claim["availability"], "not_available")
+        self.assertIsNone(claim["value"])
+
+    def test_company_with_registry_website_does_not_use_discovery(self):
+        calls = []
+        envelopes, _, _, _ = run(["923609016"], discovery=lambda p: calls.append(p) or self.found(p))
+        self.assertEqual(calls, [])
+        self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "available")
+
+    def test_discovery_is_skipped_when_budget_is_tight(self):
+        budget = Budget(100, 10_000)
+        budget.requests = 75
+        calls = []
+        envelopes, _, _, _ = run(["914778271"], budget=budget, discovery=lambda p: calls.append(p) or self.found(p))
+        self.assertEqual(calls, [])
+        self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "not_available")
+
+    def test_discovery_crash_never_breaks_the_batch(self):
+        def boom(profile):
+            raise RuntimeError("dns exploded")
+
+        envelopes, _, report, _ = run(["914778271", "923609016"], discovery=boom)
+        self.assertEqual(len(envelopes), 2)
+        self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "failed")
+        self.assertTrue(report["validation"]["passed"], report["validation"])
 
 
 if __name__ == "__main__":

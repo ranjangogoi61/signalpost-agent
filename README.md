@@ -23,7 +23,9 @@ uv sync --frozen && uv run python scripts/run_signalpost.py \
 
 ## What it publishes
 
-Official sources only for facts: BRREG entity register, roles (dates of birth discarded), subunits, group links and Regnskapsregisteret accounts. A company website is published only when it is verified as the exact legal entity; otherwise the claim is `ambiguous` and carries no value. No LinkedIn, Meta or Indeed collection; no search-engine scraping; no paid APIs; no LLM calls. Third-party cost per run: $0.
+Official sources only for facts: BRREG entity register, roles (dates of birth discarded), subunits, group links and Regnskapsregisteret accounts. A company website is published only when it is verified as the exact legal entity; otherwise the claim is `ambiguous` and carries no value.
+
+**Missing-website discovery** (companies whose registry record has no website): at most four hostname candidates are built from the legal name (e.g. `norskkaffe.no`), skipped when DNS does not resolve, then the homepage and at most two contact/about pages are fetched with robots.txt respected. The website is published **only if the company's exact nine-digit organisation number is printed on one of those pages**; name similarity alone never publishes. Disable with `--no-discovery`. No LinkedIn, Meta or Indeed collection; no search-engine scraping; no paid APIs; no LLM calls. Third-party cost per run: $0.
 
 ## Rules enforced by tests
 
