@@ -46,5 +46,5 @@ jobs:
           mkdir -p /tmp/results && cp out/summary.json out/run-report.json out/summary2.json /tmp/results/ 2>/dev/null || true
           git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
           git checkout --orphan smoke-results && git rm -rf -q . 2>/dev/null || true
-          cp /tmp/results/* . && git add -A && git commit -q -m "smoke results for ${GITHUB_SHA::7}"
+          cp /tmp/results/* . 2>/dev/null; git add summary.json run-report.json; [ -f summary2.json ] && git add summary2.json; git commit -q -m "smoke results for ${GITHUB_SHA::7}"
           git push -f origin smoke-results
