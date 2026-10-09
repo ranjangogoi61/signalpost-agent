@@ -39,11 +39,12 @@ jobs:
         if: always()
         run: |
           uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/summary.json
+          if [ -f out/envelopes2.jsonl ]; then uv run python scripts/summarize_run.py --envelopes out/envelopes2.jsonl --report out/run-report2.json --output out/summary2.json; fi
       - name: Publish counts-only summary to smoke-results branch
         if: always()
         run: |
-          mkdir -p /tmp/results && cp out/summary.json out/run-report.json /tmp/results/ 2>/dev/null || true
+          mkdir -p /tmp/results && cp out/summary.json out/run-report.json out/summary2.json /tmp/results/ 2>/dev/null || true
           git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
           git checkout --orphan smoke-results && git rm -rf -q . 2>/dev/null || true
-          cp /tmp/results/* . && git add summary.json run-report.json && git commit -q -m "smoke results for ${GITHUB_SHA::7}"
+          cp /tmp/results/* . && git add -A && git commit -q -m "smoke results for ${GITHUB_SHA::7}"
           git push -f origin smoke-results
