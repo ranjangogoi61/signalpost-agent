@@ -37,6 +37,7 @@ class CliTests(unittest.TestCase):
             envelopes = read(f"{tmp}/o/env.jsonl")
             self.assertEqual([e["organisation_number"] for e in envelopes], ["12", "abc", "x"])
             self.assertTrue(json.loads(Path(f"{tmp}/o/rep.json").read_text())["validation"]["passed"])
+            self.assertIn("Signalpost company profiles", Path(f"{tmp}/o/site/index.html").read_text(encoding="utf-8"))
 
     def test_crash_still_writes_one_envelope_per_row(self):
         module = load()

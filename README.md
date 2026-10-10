@@ -21,6 +21,12 @@ uv sync --frozen && uv run python scripts/run_signalpost.py \
 * Budget (retries and redirects count): `--max-requests-per-100` (default 1900) and `--max-seconds-per-100` (default 2400) per 100 companies. When the budget is nearly used the optional website phase is skipped and marked `failed` (`budget_exhausted`); the official registry phase always runs first.
 * Company count is never assumed: the agent processes whatever batch it is given.
 
+## Synthesis and viewer
+
+Every envelope carries a deterministic `synthesis` (what the company is, what its latest accounts show, what changed since the previous run, and what was **not** published and why). Each sentence is built only from published claims and cites their evidence ids; a validation check fails the run if a number or citation cannot be traced to a claim. No language model is used.
+
+Every run also writes an offline single-file viewer next to the report (`<report dir>/site/index.html`, or `--site-output`): search by name or organisation number, filter, open a company, compare 2 to 4 companies, and inspect each fact's source URL, retrieval time and SHA-256. It works on mobile and desktop and makes no external requests. `scripts/build_viewer.py` rebuilds it from an envelope file; `--hide-person-names` produces a public demo.
+
 ## What it publishes
 
 Official sources only for facts: BRREG entity register, roles (dates of birth discarded), subunits, group links and Regnskapsregisteret accounts. A company website is published only when it is verified as the exact legal entity; otherwise the claim is `ambiguous` and carries no value.

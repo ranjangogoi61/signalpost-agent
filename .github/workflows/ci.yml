@@ -28,6 +28,10 @@ jobs:
             --organisations smoke-companies.jsonl \
             --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
             --report out/run-report.json --run-id ci-smoke --expected-count 100
+      - name: Build and check the offline viewer (demo hides person names)
+        run: |
+          uv run python scripts/build_viewer.py --envelopes out/envelopes.jsonl --report out/run-report.json --out out/demo/index.html --hide-person-names
+          cd /tmp && npm init -y >/dev/null && npm i jsdom --silent && cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/node_modules node tools/check_viewer.js out/demo/index.html --names-hidden
       - name: Refresh run (same input, must report no false changes)
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dev'
         run: |
@@ -44,7 +48,8 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/results && cp out/summary.json out/run-report.json out/summary2.json /tmp/results/ 2>/dev/null || true
+          cp out/demo/index.html /tmp/results/index.html 2>/dev/null || true
           git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
           git checkout --orphan smoke-results && git rm -rf -q . 2>/dev/null || true
-          cp /tmp/results/* . 2>/dev/null; git add summary.json run-report.json; [ -f summary2.json ] && git add summary2.json; git commit -q -m "smoke results for ${GITHUB_SHA::7}"
+          cp /tmp/results/* . 2>/dev/null; git add summary.json run-report.json; [ -f summary2.json ] && git add summary2.json; [ -f index.html ] && git add index.html; git commit -q -m "smoke results for ${GITHUB_SHA::7}"
           git push -f origin smoke-results

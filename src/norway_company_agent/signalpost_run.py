@@ -35,6 +35,7 @@ from .official import (
 )
 from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
+from .synthesis import check_synthesis, summarize_envelope
 from .sampling import iter_bulk
 from .website import fetch_website
 
@@ -425,7 +426,7 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
 
 
 def _failed_row_envelope(row: dict[str, Any], run_id: str, started_at: str, completed_at: str, modules: list[str], reason: str) -> dict[str, Any]:
-    return {
+    envelope = {
         "run_id": run_id,
         "organisation_number": row["raw"],
         "state": "submission_error",
@@ -440,6 +441,9 @@ def _failed_row_envelope(row: dict[str, Any], run_id: str, started_at: str, comp
         "errors": [{"field": "organisation_number", "availability": "failed", "note": reason}],
         "operations": {"requests": 0, "runtime_ms": 0, "third_party_cost_usd": 0},
     }
+    envelope["refresh"] = {"compared_with_previous": False, "material_changes": 0}
+    envelope["synthesis"] = summarize_envelope(envelope)
+    return envelope
 
 
 # --------------------------------------------------------------------------- driver
@@ -511,6 +515,8 @@ def run_batch(
                 changes = []
         per_company_requests = (profile.get("run_metrics") or {}).get("requests", 0)
         envelope.update(contract_view(profile, modules, run_id=run_id, started_at=started_at, completed_at=completed_at, requests=per_company_requests, runtime_ms=runtime_ms, changes=changes))
+        envelope["refresh"] = {"compared_with_previous": bool(previous and org in previous), "material_changes": len(changes)}
+        envelope["synthesis"] = summarize_envelope(envelope)
         envelopes.append(envelope)
 
     totals: Counter = Counter()
@@ -561,6 +567,7 @@ def validate(rows: list[dict[str, Any]], envelopes: list[dict[str, Any]]) -> dic
             c["availability"] != "available" or (c["evidence_ids"] and all(i in {ev["id"] for ev in e["evidence"]} for i in c["evidence_ids"]))
             for e in envelopes for c in e.get("claims", [])
         ),
+        "synthesis_cites_existing_evidence": not any(check_synthesis(e) for e in envelopes if "synthesis" in e),
         "no_value_on_unavailable_claim": all(
             c["availability"] == "available" or c["value"] is None for e in envelopes for c in e.get("claims", [])
         ),

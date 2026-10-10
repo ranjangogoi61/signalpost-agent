@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.domain_discovery import discover_website, reverify_registry_website  # noqa: E402
 from norway_company_agent.evidence import utc_now  # noqa: E402
+from norway_company_agent.viewer import build_viewer  # noqa: E402
 from norway_company_agent.signalpost_run import AVAILABILITY_STATES, Budget, _failed_row_envelope, read_rows, run_batch, validate  # noqa: E402
 
 DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,roles,group,locations,website"
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--modules", default=DEFAULT_MODULES)
     parser.add_argument("--checkpoint-every", type=int, default=25, help="Accepted for compatibility with the reference kit; runs are short and always finish in one pass")
     parser.add_argument("--resume", action="store_true", help="Accepted for compatibility with the reference kit; every run recomputes all rows")
+    parser.add_argument("--site-output", default=None, help="Offline HTML viewer path (default: <report dir>/site/index.html); pass an empty string to skip")
     parser.add_argument("--no-discovery", action="store_true", help="Do not look for websites of companies whose registry record has none")
     args, unknown = parser.parse_known_args(argv)
     if unknown:
@@ -97,6 +99,13 @@ def main(argv: list[str] | None = None) -> None:
     write_jsonl(Path(args.output), envelopes)
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    site_path = args.site_output if args.site_output is not None else str(Path(args.report).parent / "site" / "index.html")
+    if site_path:
+        try:
+            Path(site_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(site_path).write_text(build_viewer(envelopes, report), encoding="utf-8")
+        except Exception as exc:  # the viewer must never break the run
+            print(f"warning: viewer not written: {exc}", file=sys.stderr)
     print(json.dumps({k: report.get(k) for k in ("run_id", "expected_count", "emitted_envelopes", "operations", "discovery", "availability_totals", "validation", "error")}, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["validation"]["passed"] else 1)
 

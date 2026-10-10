@@ -40,6 +40,10 @@ Facts only from an official register or from a company page that prints the comp
 
 Role holders are published by name and role only; dates of birth are discarded.
 
+## Synthesis and UX
+
+Each envelope has a deterministic, source-cited `synthesis`, and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.
+
 ## Smoke result and report
 
 The 100-company live run and its refresh re-run are produced by the `ci` workflow on every push to `dev`; counts-only summaries are on the `smoke-results` branch (`summary.json`, `summary2.json`, `run-report.json`). They contain no company or person data.
