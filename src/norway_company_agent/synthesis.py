@@ -141,7 +141,7 @@ def _numbers(value: Any, out: set[str] | None = None) -> set[str]:
     if isinstance(value, bool) or value is None:
         return out
     if isinstance(value, (int, float)):
-        out.update({str(int(round(value))), str(int(value)), str(value)})
+        out.update({str(abs(int(round(value)))), str(abs(int(value))), str(abs(value)), str(int(round(value))), str(int(value)), str(value)})
     elif isinstance(value, str):
         out.update(re.findall(r"\d+", value))
         out.add(re.sub(r"\D", "", value))
