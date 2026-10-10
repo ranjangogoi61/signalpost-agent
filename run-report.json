@@ -1,0 +1,68 @@
+{
+  "run_id": "ci-smoke",
+  "started_at": "2026-10-10T11:22:50.445717Z",
+  "completed_at": "2026-10-10T11:25:04.869969Z",
+  "expected_count": 100,
+  "emitted_envelopes": 100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "website"
+  ],
+  "registry_anchor": {
+    "bulk_used": false,
+    "from_bulk": 0,
+    "from_live_batch": 100,
+    "from_direct": 0,
+    "missing": 0
+  },
+  "operations": {
+    "requests": 714,
+    "requests_by_phase": {
+      "official": 400,
+      "discovery": 218,
+      "website": 54
+    },
+    "requests_refused_by_budget": 0,
+    "bytes": 19860097,
+    "runtime_ms": 134424,
+    "p50_ms": 617,
+    "p95_ms": 1078,
+    "third_party_cost_usd": 0
+  },
+  "budget": {
+    "max_requests": 1900,
+    "max_seconds": 2400,
+    "exhausted": false
+  },
+  "discovery": {
+    "attempted": 93,
+    "verified": 2,
+    "method": "domain_guess_exact_org_number_v1"
+  },
+  "availability_totals": {
+    "available": 612,
+    "not_available": 183,
+    "blocked": 1,
+    "not_applicable": 0,
+    "ambiguous": 4,
+    "failed": 0
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "same_order_as_input": true,
+      "all_modules_have_six_state_availability": true,
+      "every_available_claim_has_evidence": true,
+      "synthesis_cites_existing_evidence": true,
+      "no_value_on_unavailable_claim": true,
+      "matches_expected_count": true
+    }
+  }
+}

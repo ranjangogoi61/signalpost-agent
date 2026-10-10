@@ -1,0 +1,130 @@
+{
+  "envelopes": 100,
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "same_order_as_input": true,
+      "all_modules_have_six_state_availability": true,
+      "every_available_claim_has_evidence": true,
+      "synthesis_cites_existing_evidence": true,
+      "no_value_on_unavailable_claim": true,
+      "matches_expected_count": true
+    }
+  },
+  "operations": {
+    "requests": 714,
+    "requests_by_phase": {
+      "official": 400,
+      "discovery": 218,
+      "website": 54
+    },
+    "requests_refused_by_budget": 0,
+    "bytes": 19860097,
+    "runtime_ms": 134424,
+    "p50_ms": 617,
+    "p95_ms": 1078,
+    "third_party_cost_usd": 0
+  },
+  "budget": {
+    "max_requests": 1900,
+    "max_seconds": 2400,
+    "exhausted": false
+  },
+  "registry_anchor": {
+    "bulk_used": false,
+    "from_bulk": 0,
+    "from_live_batch": 100,
+    "from_direct": 0,
+    "missing": 0
+  },
+  "discovery": {
+    "attempted": 93,
+    "verified": 2,
+    "method": "domain_guess_exact_org_number_v1"
+  },
+  "availability_totals": {
+    "available": 612,
+    "not_available": 183,
+    "blocked": 1,
+    "not_applicable": 0,
+    "ambiguous": 4,
+    "failed": 0
+  },
+  "claims_by_field": {
+    "employees": {
+      "not_available": 90,
+      "available": 10
+    },
+    "financials_latest": {
+      "available": 100
+    },
+    "industry": {
+      "available": 100
+    },
+    "legal_form": {
+      "available": 100
+    },
+    "legal_name": {
+      "available": 100
+    },
+    "municipality": {
+      "available": 100
+    },
+    "official_website": {
+      "not_available": 91,
+      "available": 4,
+      "ambiguous": 4,
+      "blocked": 1
+    },
+    "registered_locations": {
+      "available": 73,
+      "not_available": 27
+    },
+    "registered_website": {
+      "not_available": 93,
+      "available": 7
+    },
+    "role_holders": {
+      "available": 100
+    },
+    "social_links": {
+      "not_available": 3,
+      "available": 1
+    },
+    "website_title": {
+      "available": 4
+    }
+  },
+  "modules": {
+    "accounting_obligation": {
+      "available": 100
+    },
+    "financials": {
+      "available": 100
+    },
+    "group": {
+      "not_available": 92,
+      "available": 8
+    },
+    "locations": {
+      "available": 100
+    },
+    "registry": {
+      "available": 100
+    },
+    "registry_live": {
+      "available": 100
+    },
+    "roles": {
+      "available": 100
+    },
+    "website": {
+      "not_available": 91,
+      "available": 4,
+      "ambiguous": 4,
+      "blocked": 1
+    }
+  },
+  "changes_total": 0
+}
