@@ -20,7 +20,7 @@ uv run python scripts/run_signalpost.py \
 
 Optional: `--bulk <brreg-enheter.csv>` (frozen BRREG snapshot; the live registry is used without it), `--previous <earlier profiles.jsonl>` (refresh / material changes), `--no-discovery`, `--max-requests-per-100` (default 1900), `--max-seconds-per-100` (default 2400), `--workers` (default 8).
 
-The agent reads whatever batch it is given; it assumes no company count.
+The agent reads whatever batch it is given; it assumes no company count. The reference kit's flags (`--resume`, `--checkpoint-every`) are accepted and unknown flags are ignored with a warning. If the run aborts unexpectedly it still writes one `failed` envelope per input row and exits 1 with the error in the report.
 
 ## Models, APIs, licences, cost
 
