@@ -46,6 +46,25 @@ class SynthesisTests(unittest.TestCase):
         joined = " ".join(s["text"] for s in second[0]["synthesis"]["sentences"])
         self.assertIn("no material change", joined)
 
+    def test_real_world_value_shapes_do_not_trigger_false_alarms(self):
+        envelope, _ = self.envelope()
+        for claim in envelope["claims"]:
+            if claim["field"] == "financials_latest":
+                claim["value"] = {"period": {"fraDato": "2025-01-01", "tilDato": "2025-12-31"}, "currency": "NOK", "revenue": 1234567.6, "annual_result": -45210.4, "assets": 987654321.0}
+            if claim["field"] == "role_holders":
+                claim["value"] = [{"name": f"P{i}", "role": "Styremedlem" if i % 3 else "Daglig leder"} for i in range(12)]
+            if claim["field"] == "registered_locations":
+                claim["value"] = [{"name": f"L{i}"} for i in range(37)]
+                claim["availability"] = "available"
+                claim["evidence_ids"] = [envelope["evidence"][0]["id"]]
+        from norway_company_agent.synthesis import summarize_envelope
+        envelope["synthesis"] = summarize_envelope(envelope)
+        text = " ".join(s["text"] for s in envelope["synthesis"]["sentences"])
+        self.assertIn("1 234 568", text)
+        self.assertIn("12 active role holders", text)
+        self.assertIn("37 subunit", text)
+        self.assertEqual(check_synthesis(envelope), [])
+
     def test_tampered_synthesis_is_detected(self):
         envelope, _ = self.envelope()
         envelope["synthesis"]["sentences"][0]["text"] += " It employs 99999 people."

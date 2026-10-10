@@ -135,6 +135,29 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     return {"method": "deterministic_template_v1", "sentences": sentences, "unknown": unknown}
 
 
+def _numbers(value: Any, out: set[str] | None = None) -> set[str]:
+    """Every number a sentence may legitimately state about a claim value (values and counts)."""
+    out = set() if out is None else out
+    if isinstance(value, bool) or value is None:
+        return out
+    if isinstance(value, (int, float)):
+        out.update({str(int(round(value))), str(int(value)), str(value)})
+    elif isinstance(value, str):
+        out.update(re.findall(r"\d+", value))
+        out.add(re.sub(r"\D", "", value))
+    elif isinstance(value, list):
+        out.add(str(len(value)))
+        if all(isinstance(item, dict) and "role" in item for item in value):
+            out.update(str(n) for n in Counter(str(item.get("role") or "role") for item in value).values())
+        for item in value:
+            _numbers(item, out)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _numbers(item, out)
+    out.discard("")
+    return out
+
+
 def check_synthesis(envelope: dict[str, Any]) -> list[str]:
     """Return problems: cited evidence must exist and every number must come from a cited claim."""
     problems: list[str] = []
@@ -144,13 +167,15 @@ def check_synthesis(envelope: dict[str, Any]) -> list[str]:
         for evidence_id in sentence["evidence_ids"]:
             if evidence_id not in known:
                 problems.append(f"unknown evidence id {evidence_id}")
-        if sentence["fields"] and not sentence["text"].startswith("Not published") and not sentence["evidence_ids"]:
+        text = sentence["text"]
+        if text.startswith(("Compared", "This is the first", "Not published")):
+            continue
+        if sentence["fields"] and not sentence["evidence_ids"]:
             problems.append("claim sentence without evidence")
-        source = " ".join(str(claims.get(f, {}).get("value")) for f in sentence["fields"]).replace(" ", "")
-        for number in re.findall(r"\d[\d ]*\d|\d", sentence["text"]):
-            if sentence["text"].startswith(("Compared", "This is the first")):
-                continue
-            digits = number.replace(" ", "")
-            if digits not in source and digits not in re.sub(r"\D", "", source) and len(digits) > 1:
-                problems.append(f"number {digits} not found in cited claims")
+        allowed: set[str] = set()
+        for field in sentence["fields"]:
+            _numbers((claims.get(field) or {}).get("value"), allowed)
+        for number in re.findall(r"\d+(?: \d{3})*", text):
+            if number not in allowed and number.replace(" ", "") not in allowed:
+                problems.append(f"number {number.replace(' ', '')} not found in cited claims")
     return problems
