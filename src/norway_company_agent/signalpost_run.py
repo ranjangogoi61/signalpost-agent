@@ -341,6 +341,58 @@ def module_availability(profile: dict[str, Any], module: str) -> tuple[str, str 
     return availability, note or None
 
 
+
+def _pick(row: dict[str, Any], path: str) -> Any:
+    """Read a BRREG field from an API row (nested) or a bulk CSV row (flat dotted keys)."""
+    if path in row:
+        return row[path]
+    value: Any = row
+    for part in path.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
+def _address(row: dict[str, Any], key: str) -> str | None:
+    lines = _pick(row, f"{key}.adresse")
+    lines = [str(x) for x in lines] if isinstance(lines, list) else ([str(lines)] if lines else [])
+    town = " ".join(str(x) for x in (_pick(row, f"{key}.postnummer"), _pick(row, f"{key}.poststed")) if x)
+    parts = [*lines, town, str(_pick(row, f"{key}.land") or "")]
+    text = ", ".join(part for part in parts if part)
+    return text or None
+
+
+def registry_extra_facts(row: dict[str, Any]) -> list[tuple[str, Any, str]]:
+    """Official registry facts beyond the basics, each with the exact source span it comes from."""
+    facts: list[tuple[str, Any, str]] = []
+    address = _address(row, "forretningsadresse")
+    if address:
+        facts.append(("business_address", address, f"forretningsadresse={address}"))
+    postal = _address(row, "postadresse")
+    if postal and postal != address:
+        facts.append(("postal_address", postal, f"postadresse={postal}"))
+    for field, key in (("founded", "stiftelsesdato"), ("registered_on", "registreringsdatoEnhetsregisteret")):
+        value = _pick(row, key)
+        if value:
+            facts.append((field, str(value), f"{key}={value}"))
+    vat = _pick(row, "registrertIMvaregisteret")
+    if isinstance(vat, bool) or str(vat).lower() in {"true", "false"}:
+        facts.append(("vat_registered", str(vat).lower() == "true", f"registrertIMvaregisteret={vat}"))
+    sector = _pick(row, "institusjonellSektorkode.beskrivelse")
+    if sector:
+        facts.append(("sector", str(sector), f"institusjonellSektorkode={sector}"))
+    secondary = [str(_pick(row, f"naeringskode{n}.beskrivelse")) for n in (2, 3) if _pick(row, f"naeringskode{n}.beskrivelse")]
+    if secondary:
+        facts.append(("secondary_industries", secondary, "naeringskode2/3=" + "; ".join(secondary)))
+    flags = {"bankrupt": _pick(row, "konkurs"), "under_liquidation": _pick(row, "underAvvikling"), "under_forced_liquidation": _pick(row, "underTvangsavviklingEllerTvangsopploesning")}
+    known = [k for k, v in flags.items() if v is not None and str(v).lower() in {"true", "false"}]
+    if known:
+        active = [k for k in known if str(flags[k]).lower() == "true"]
+        facts.append(("legal_status", ", ".join(active) if active else "active", "konkurs/underAvvikling/underTvangsavvikling flags=" + ",".join(f"{k}:{flags[k]}" for k in known)))
+    return facts
+
+
 def _claim(field: str, value: Any, availability: str, evidence_ids: list[str], confidence: float | None) -> dict[str, Any]:
     return {"field": field, "value": value, "availability": availability, "confidence": confidence, "evidence_ids": evidence_ids}
 
@@ -391,8 +443,14 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
         add(reg_module, "industry", profile.get("industry_label") or None, f"{reg_span} naeringskode1={profile.get('industry_code')}")
         add(reg_module, "municipality", profile.get("municipality") or None, f"{reg_span} kommune={profile.get('municipality')}")
         add(reg_module, "registered_website", profile.get("website") or None, f"{reg_span} hjemmeside={profile.get('website')}")
+        raw = reg.get("value") if isinstance(reg.get("value"), dict) else {}
+        for field, value, span in registry_extra_facts(raw):
+            add(reg_module, field, value, f"{reg_span} {span}")
     else:
         add(reg_module, "legal_name", None, reg_span)
+    if "financial_history" in set(modules):
+        years = ((profile.get("evidence", {}).get("financial_history") or {}).get("value") or {}).get("years") or []
+        add("financial_history", "annual_account_years", years, f"org={org} account copies for {', '.join(years)}")
     if "financials" in set(modules):
         records = ((profile.get("evidence", {}).get("financials") or {}).get("value") or {}).get("records") or []
         add("financials", "financials_latest", records[0] if records else None, f"org={org} period={(records[0] or {}).get('period') if records else None}")

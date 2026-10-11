@@ -22,6 +22,14 @@ FIELD_LABELS = {
     "official_website": "official website",
     "website_title": "website title",
     "social_links": "social profiles",
+    "business_address": "business address",
+    "founded": "founding date",
+    "registered_on": "registration date",
+    "vat_registered": "VAT registration",
+    "sector": "institutional sector",
+    "secondary_industries": "secondary industries",
+    "legal_status": "legal status",
+    "annual_account_years": "filed annual accounts",
 }
 STATE_WORDS = {
     "not_available": "not found",
@@ -84,6 +92,33 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
             used.append("employees")
         add(text + ".", used)
 
+    status = claims.get("legal_status")
+    if _have(status):
+        text = "Its legal status in the register is active." if status["value"] == "active" else f"Its legal status in the register is flagged: {str(status['value']).replace('_', ' ')}."
+        add(text, ["legal_status"])
+    address = claims.get("business_address")
+    if _have(address):
+        add(f"Its registered business address is {address['value']}.", ["business_address"])
+    bits = []
+    used = []
+    for field, label in (("founded", "founded on"), ("registered_on", "entered in the register on")):
+        if _have(claims.get(field)):
+            bits.append(f"{label} {claims[field]['value']}")
+            used.append(field)
+    if bits:
+        add("It was " + " and ".join(bits) + ".", used)
+    extra = []
+    used = []
+    if _have(claims.get("sector")):
+        extra.append(f"is classified in the {str(claims['sector']['value']).lower()} sector")
+        used.append("sector")
+    vat = claims.get("vat_registered")
+    if vat and vat.get("availability") == "available" and vat.get("value") is not None:
+        extra.append("is registered for VAT" if vat["value"] else "is not registered for VAT")
+        used.append("vat_registered")
+    if extra:
+        add("It " + " and ".join(extra) + ".", used)
+
     fin = claims.get("financials_latest")
     if _have(fin):
         record = fin["value"]
@@ -97,6 +132,11 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         span = f" for {period.get('fraDato')} to {period.get('tilDato')}" if period.get("fraDato") and period.get("tilDato") else ""
         if bits:
             add(f"Its latest filed annual accounts{span} report " + ", ".join(bits) + ".", ["financials_latest"])
+
+    years = claims.get("annual_account_years")
+    if _have(years):
+        values = sorted(str(y) for y in years["value"])
+        add(f"Annual account copies are on file for {len(values)} year(s), from {values[0]} to {values[-1]}.", ["annual_account_years"])
 
     roles = claims.get("role_holders")
     if _have(roles):

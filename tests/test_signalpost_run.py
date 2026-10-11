@@ -16,10 +16,10 @@ from norway_company_agent.signalpost_run import (
     run_batch,
 )
 
-MODULES = ["registry", "accounting_obligation", "registry_live", "financials", "roles", "group", "locations", "website"]
+MODULES = ["registry", "accounting_obligation", "registry_live", "financials", "financial_history", "roles", "group", "locations", "website"]
 
 ENTITIES = {
-    "923609016": {"organisasjonsnummer": "923609016", "navn": "EQUINOR ASA", "organisasjonsform": {"kode": "ASA"}, "antallAnsatte": 21272, "hjemmeside": "www.equinor.com", "naeringskode1": {"kode": "06.100", "beskrivelse": "Utvinning av råolje"}, "forretningsadresse": {"kommune": "STAVANGER", "kommunenummer": "1103"}},
+    "923609016": {"organisasjonsnummer": "923609016", "navn": "EQUINOR ASA", "organisasjonsform": {"kode": "ASA"}, "antallAnsatte": 21272, "hjemmeside": "www.equinor.com", "naeringskode1": {"kode": "06.100", "beskrivelse": "Utvinning av råolje"}, "forretningsadresse": {"adresse": ["Forusbeen 50"], "postnummer": "4035", "poststed": "STAVANGER", "land": "Norge", "kommune": "STAVANGER", "kommunenummer": "1103"}, "stiftelsesdato": "1972-09-18", "registreringsdatoEnhetsregisteret": "1995-01-01", "registrertIMvaregisteret": True, "institusjonellSektorkode": {"kode": "2100", "beskrivelse": "Private aksjeselskaper mv."}, "naeringskode2": {"kode": "06.200", "beskrivelse": "Utvinning av naturgass"}, "konkurs": False, "underAvvikling": False, "underTvangsavviklingEllerTvangsopploesning": False},
     "914778271": {"organisasjonsnummer": "914778271", "navn": "NORSK KAFFE AS", "organisasjonsform": {"kode": "AS"}, "antallAnsatte": 3, "hjemmeside": "", "naeringskode1": {"kode": "10.830", "beskrivelse": "Kaffe"}, "forretningsadresse": {"kommune": "OSLO", "kommunenummer": "0301"}},
 }
 
@@ -42,6 +42,8 @@ class FakeApi:
             if org in self.entities:
                 return FetchResult(url, 200, 5, 10, self.entities[org], content_sha256="c" * 64, retrieved_at="2026-10-08T00:00:00Z")
             return FetchResult(url, 404, 5, 0, error="HTTP 404", retrieved_at="2026-10-08T00:00:00Z")
+        if parsed.path.endswith("/aar"):
+            return FetchResult(url, 200, 5, 10, [2023, 2024, 2025], content_sha256="h" * 64, retrieved_at="2026-10-08T00:00:00Z")
         if "regnskap" in parsed.path:
             return FetchResult(url, 200, 5, 10, [{"id": 1, "regnskapstype": "SELSKAP", "valuta": "NOK", "regnskapsperiode": {"fraDato": "2025-01-01", "tilDato": "2025-12-31"}, "resultatregnskapResultat": {"aarsresultat": 5}, "eiendeler": {"sumEiendeler": 10}}], content_sha256="d" * 64, retrieved_at="2026-10-08T00:00:00Z")
         if "roller" in parsed.path:
@@ -249,6 +251,38 @@ class DiscoveryIntegrationTests(unittest.TestCase):
         self.assertEqual(len(envelopes), 2)
         self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "failed")
         self.assertTrue(report["validation"]["passed"], report["validation"])
+
+
+class ExtraRegistryFactsTests(unittest.TestCase):
+    def test_official_registry_facts_are_published_with_evidence(self):
+        envelopes, _, report, _ = run(["923609016"])
+        claims = {c["field"]: c for c in envelopes[0]["claims"]}
+        self.assertEqual(claims["business_address"]["value"], "Forusbeen 50, 4035 STAVANGER, Norge")
+        self.assertEqual(claims["founded"]["value"], "1972-09-18")
+        self.assertIs(claims["vat_registered"]["value"], True)
+        self.assertEqual(claims["legal_status"]["value"], "active")
+        self.assertEqual(claims["sector"]["value"], "Private aksjeselskaper mv.")
+        self.assertEqual(claims["secondary_industries"]["value"], ["Utvinning av naturgass"])
+        self.assertEqual(claims["annual_account_years"]["value"], ["2023", "2024", "2025"])
+        for field in ("business_address", "founded", "legal_status", "annual_account_years"):
+            self.assertTrue(claims[field]["evidence_ids"], field)
+        text = " ".join(s["text"] for s in envelopes[0]["synthesis"]["sentences"])
+        self.assertIn("registered business address is Forusbeen 50", text)
+        self.assertIn("3 year(s), from 2023 to 2025", text)
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+
+    def test_missing_optional_fields_are_not_invented(self):
+        envelopes, _, _, _ = run(["914778271"])
+        claims = {c["field"]: c for c in envelopes[0]["claims"]}
+        for field in ("business_address", "founded", "vat_registered", "sector"):
+            self.assertNotIn(field, claims)
+
+    def test_bulk_csv_style_flat_keys_work_too(self):
+        from norway_company_agent.signalpost_run import registry_extra_facts
+
+        facts = dict((f, v) for f, v, _ in registry_extra_facts({"forretningsadresse.adresse": "Storgata 1", "forretningsadresse.postnummer": "0155", "forretningsadresse.poststed": "OSLO", "stiftelsesdato": "2001-02-03", "registrertIMvaregisteret": "true"}))
+        self.assertEqual(facts["business_address"], "Storgata 1, 0155 OSLO")
+        self.assertIs(facts["vat_registered"], True)
 
 
 class ReverifyIntegrationTests(unittest.TestCase):
