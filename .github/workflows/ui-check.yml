@@ -7,6 +7,10 @@ permissions:
 jobs:
   shots:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: ui-check
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - name: get the demo viewer built by CI
@@ -18,8 +22,8 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p /tmp/shots /tmp/pw && cd /tmp/pw && npm init -y >/dev/null
-          (npm i playwright --silent && npx playwright install --with-deps chromium) > /tmp/shots/install.log 2>&1 || echo "install failed" >> /tmp/shots/install.log
-          cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/pw/node_modules node tools/ui_shots.js /tmp/demo.html /tmp/shots > /tmp/shots/run.log 2>&1 || echo "script failed" >> /tmp/shots/run.log
+          (which google-chrome; google-chrome --version; npm i playwright --silent) > /tmp/shots/install.log 2>&1 || echo "install failed" >> /tmp/shots/install.log
+          cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/pw/node_modules timeout 240 node tools/ui_shots.js /tmp/demo.html /tmp/shots > /tmp/shots/run.log 2>&1 || echo "script failed" >> /tmp/shots/run.log
           tail -c 3000 /tmp/shots/install.log > /tmp/shots/install-tail.log; rm /tmp/shots/install.log
       - name: publish screenshots
         if: always()

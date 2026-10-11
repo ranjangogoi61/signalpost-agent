@@ -7,7 +7,7 @@ fs.mkdirSync(out, { recursive: true });
 const report = [];
 (async () => {
 try {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: 'chrome', args: ['--no-sandbox'] });
   async function overflow(page, label) {
     const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, h: document.documentElement.scrollHeight }));
     report.push(`${label}: scrollWidth=${r.sw} innerWidth=${r.iw} pageHeight=${r.h} horizontalOverflow=${r.sw > r.iw + 1}`);
