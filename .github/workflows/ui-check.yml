@@ -15,11 +15,15 @@ jobs:
           git show origin/smoke-results:index.html > /tmp/demo.html
           ls -l /tmp/demo.html
       - name: screenshots
+        continue-on-error: true
         run: |
-          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright --silent && npx playwright install --with-deps chromium >/dev/null
-          cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/pw/node_modules node tools/ui_shots.js /tmp/demo.html /tmp/shots
+          mkdir -p /tmp/shots /tmp/pw && cd /tmp/pw && npm init -y >/dev/null
+          (npm i playwright --silent && npx playwright install --with-deps chromium) > /tmp/shots/install.log 2>&1 || echo "install failed" >> /tmp/shots/install.log
+          cd "$GITHUB_WORKSPACE" && NODE_PATH=/tmp/pw/node_modules node tools/ui_shots.js /tmp/demo.html /tmp/shots > /tmp/shots/run.log 2>&1 || echo "script failed" >> /tmp/shots/run.log
+          tail -c 3000 /tmp/shots/install.log > /tmp/shots/install-tail.log; rm /tmp/shots/install.log
       - name: publish screenshots
+        if: always()
         run: |
           git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
           git checkout --orphan ui-shots && git rm -rf -q . 2>/dev/null || true
-          cp /tmp/shots/* . && git add *.png report.txt && git commit -q -m "ui screenshots" && git push -f origin ui-shots
+          cp /tmp/shots/* . && git add -A && git commit -q -m "ui screenshots" && git push -f origin ui-shots

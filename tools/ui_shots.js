@@ -6,6 +6,7 @@ const out = process.argv[3];
 fs.mkdirSync(out, { recursive: true });
 const report = [];
 (async () => {
+try {
   const browser = await chromium.launch();
   async function overflow(page, label) {
     const r = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, h: document.documentElement.scrollHeight }));
@@ -51,4 +52,5 @@ const report = [];
   report.push("page errors: " + JSON.stringify(errors));
   fs.writeFileSync(`${out}/report.txt`, report.join("\n") + "\n");
   await browser.close();
+} catch (e) { report.push('SCRIPT ERROR: ' + (e && e.stack || e)); fs.writeFileSync(`${out}/report.txt`, report.join('\n') + '\n'); }
 })();
