@@ -59,8 +59,11 @@ h1{font-size:1.25rem;margin:0 0 4px}h2{font-size:1.1rem;margin:16px 0 8px}h3{fon
 input,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:44px}
 input[type=search]{flex:1 1 220px}button{cursor:pointer}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-main{display:grid;grid-template-columns:1fr;gap:12px;padding:12px 16px}
-@media (min-width:900px){main{grid-template-columns:minmax(300px,380px) 1fr;align-items:start}#list{max-height:calc(100vh - 150px);overflow:auto;position:sticky;top:8px}}
+main{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 16px}main>section{min-width:0}.card{min-width:0}
+.cardtop{display:flex;gap:8px;justify-content:space-between;align-items:flex-start}.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}.chips .lbl{font-size:.82rem;color:var(--muted)}.openbtn{width:100%;margin-top:6px}.back{display:none}.more{width:100%;margin:4px 0 12px}
+@media (max-width:899px){.back{display:inline-block;margin-bottom:8px}}
+@media (max-width:700px){table.facts thead{display:none}table.facts tr{display:block;border-bottom:1px solid var(--line);padding:8px 0}table.facts td{display:block;border:0;padding:2px 0}table.facts td:first-child{font-weight:600}}
+@media (min-width:900px){main{grid-template-columns:minmax(300px,380px) minmax(0,1fr);align-items:start}#list{max-height:calc(100vh - 150px);overflow:auto;position:sticky;top:8px}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 8px}
 .row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}.name{font-weight:600}
 .badge{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:1px 8px;font-size:.78rem;white-space:nowrap}
@@ -72,7 +75,7 @@ main{display:grid;grid-template-columns:1fr;gap:12px;padding:12px 16px}
 </head>
 <body>
 <a class="skip" href="#detail">Skip to company details</a>
-<header><h1 id="title"></h1><div class="meta" id="runmeta"></div><div class="meta" id="legend"></div></header>
+<header><h1 id="title"></h1><div class="meta" id="runmeta"></div><details class="meta"><summary>What do the states mean?</summary><div id="legend"></div></details></header>
 <div class="bar" role="search">
 <label class="meta" for="q" style="align-self:center">Find</label><input id="q" type="search" placeholder="Name or organisation number" autocomplete="off">
 <label class="meta" for="f" style="align-self:center">Show</label>
@@ -112,26 +115,29 @@ var sel={},open=null;
 function filtered(){var q=$("q").value.trim().toLowerCase(),f=$("f").value;return D.companies.filter(function(c){
  if(q&&c.name.toLowerCase().indexOf(q)<0&&String(c.org).indexOf(q.replace(/\s/g,""))<0)return false;
  if(f==="site")return hasSite(c);if(f==="nosite")return !hasSite(c);if(f==="attention")return attention(c);if(f==="changed")return c.changes.length>0;return true})}
-function renderList(){var box=$("list");box.textContent="";var rows=filtered();
+var PAGE=25,shown=PAGE;
+function renderList(reset){if(reset!==false)shown=PAGE;var box=$("list");box.textContent="";var rows=filtered();
  if(!rows.length){box.appendChild(el("div",{class:"empty",text:"No company matches this search."}));return}
- rows.forEach(function(c){
-  var cb=el("input",{type:"checkbox","aria-label":"Select "+c.name+" for comparison",style:"min-height:auto;width:20px;height:20px"});cb.checked=!!sel[c.org];
+ rows.slice(0,shown).forEach(function(c){
+  var cb=el("input",{type:"checkbox","aria-label":"Select "+c.name+" for comparison",style:"min-height:auto;width:22px;height:22px;flex:none"});cb.checked=!!sel[c.org];
   cb.addEventListener("change",function(){if(cb.checked)sel[c.org]=1;else delete sel[c.org];$("cmpbtn").textContent="Compare selected ("+Object.keys(sel).length+")";card.className="card"+(sel[c.org]?" sel":"")});
-  var b=el("button",{type:"button","aria-label":"Open "+c.name,text:"Open"});b.addEventListener("click",function(){show(c.org)});
+  var b=el("button",{type:"button",class:"openbtn","aria-label":"Open "+c.name,text:"Open"});b.addEventListener("click",function(){show(c.org,true)});
   var card=el("div",{class:"card"+(sel[c.org]?" sel":""),role:"listitem"},[
-   el("div",{class:"row"},[el("span",{class:"name",text:c.name}),cb]),
+   el("div",{class:"cardtop"},[el("span",{class:"name",text:c.name}),cb]),
    el("div",{class:"meta",text:"Org. "+c.org}),
-   el("div",{class:"row"},[el("span",{},[badge(c.modules.website||"not_available"),el("span",{text:" website "}),badge(c.modules.financials||"not_available"),el("span",{text:" accounts"})]),b])]);
-  box.appendChild(card)})}
+   el("div",{class:"chips"},[el("span",{class:"lbl",text:"Website"}),badge(c.modules.website||"not_available"),el("span",{class:"lbl",text:"Accounts"}),badge(c.modules.financials||"not_available")]),b]);
+  box.appendChild(card)});
+ if(rows.length>shown){var m=el("button",{type:"button",class:"more",text:"Show more ("+(rows.length-shown)+" left)"});m.addEventListener("click",function(){shown+=PAGE;renderList(false)});box.appendChild(m)}}
 function srcBlock(c,cl){if(!cl.evidence_ids||!cl.evidence_ids.length)return el("span",{class:"src",text:"No source (not published)"});
  var d=el("details",{},[el("summary",{text:"Source ("+cl.evidence_ids.length+")"})]);
  cl.evidence_ids.forEach(function(id){var e=evOf(c,id);if(!e)return;d.appendChild(el("div",{class:"src"},[link(e.source_url),el("div",{text:"Retrieved "+(e.retrieved_at||"unknown")+" | "+(e.source_class||"source")}),el("div",{},[el("span",{text:"SHA-256 "}),el("code",{text:e.content_sha256||"n/a"})]),el("div",{text:"Evidence: "+(e.claim_span||"")})]))});return d}
-function show(org){open=org;var c=D.companies.filter(function(x){return x.org===org})[0];var box=$("detail");box.textContent="";if(!c){return}
+function show(org,focus){open=org;var c=D.companies.filter(function(x){return x.org===org})[0];var box=$("detail");box.textContent="";if(!c){return}
  try{history.replaceState(null,"","#"+org)}catch(e){}
- box.appendChild(el("div",{class:"card"},[el("h2",{text:c.name}),el("div",{class:"meta",text:"Organisation number "+c.org})]));
+ var bk=el("button",{type:"button",class:"back",text:"Back to list"});bk.addEventListener("click",function(){$("list").scrollIntoView({block:"start"})});
+ box.appendChild(el("div",{class:"card"},[bk,el("h2",{text:c.name}),el("div",{class:"meta",text:"Organisation number "+c.org})]));
  var s=el("div",{class:"card"},[el("h3",{text:"Summary"})]);c.synthesis.sentences.forEach(function(x){s.appendChild(el("p",{class:"sent",text:x.text}))});
  s.appendChild(el("div",{class:"src",text:"Built only from the published facts below; no language model."}));box.appendChild(s);
- var t=el("table",{},[el("thead",{},[el("tr",{},[el("th",{text:"Fact"}),el("th",{text:"Value"}),el("th",{text:"State"}),el("th",{text:"Source"})])])]);var tb=el("tbody");
+ var t=el("table",{class:"facts"},[el("thead",{},[el("tr",{},[el("th",{text:"Fact"}),el("th",{text:"Value"}),el("th",{text:"State"}),el("th",{text:"Source"})])])]);var tb=el("tbody");
  c.claims.forEach(function(cl){tb.appendChild(el("tr",{},[el("td",{text:FIELD[cl.field]||cl.field}),el("td",{text:cl.availability==="available"?valueText(cl.field,cl.value):"-"}),el("td",{},[badge(cl.availability)]),el("td",{},[srcBlock(c,cl)])]))});
  t.appendChild(tb);box.appendChild(el("div",{class:"card"},[el("h3",{text:"Facts and sources"}),el("div",{class:"scroll"},[t])]));
  var ch=el("div",{class:"card"},[el("h3",{text:"What changed"})]);
@@ -140,7 +146,7 @@ function show(org){open=org;var c=D.companies.filter(function(x){return x.org===
  var u=el("div",{class:"card"},[el("h3",{text:"Not published and why"})]);
  if(c.synthesis.unknown.length)c.synthesis.unknown.forEach(function(x){u.appendChild(el("p",{class:"sent"},[badge(x.availability),el("span",{text:" "+x.label+": "+x.meaning})]))});else u.appendChild(el("p",{class:"sent",text:"Every listed fact was found and verified."}));
  c.errors.forEach(function(x){u.appendChild(el("p",{class:"src",text:(x.field||"")+": "+(x.note||"")}))});box.appendChild(u);
- if(window.matchMedia&&!window.matchMedia("(min-width:900px)").matches)box.focus()}
+ if(focus&&window.matchMedia&&!window.matchMedia("(min-width:900px)").matches){box.scrollIntoView({block:"start"})}}
 function compare(){var keys=Object.keys(sel);var box=$("detail");box.textContent="";
  if(keys.length<2){box.appendChild(el("div",{class:"empty",text:"Tick two to four companies in the list, then press Compare."}));return}
  keys=keys.slice(0,4);var cs=keys.map(function(k){return D.companies.filter(function(x){return x.org===k})[0]}).filter(Boolean);
@@ -151,9 +157,9 @@ $("title").textContent=D.title;
 var tot=D.run.availability_totals||{};
 $("runmeta").textContent="Run "+(D.run.run_id||"")+" | "+D.companies.length+" companies | one result per input company";
 $("legend").textContent="States: available = found and sourced; not available = looked, nothing there; ambiguous = could not confirm it is this company; blocked = source refused; failed = lookup broke; not applicable = does not apply.";
-$("q").addEventListener("input",renderList);$("f").addEventListener("change",renderList);$("cmpbtn").addEventListener("click",compare);
+$("q").addEventListener("input",function(){renderList()});$("f").addEventListener("change",function(){renderList()});$("cmpbtn").addEventListener("click",compare);
 $("clr").addEventListener("click",function(){sel={};$("q").value="";$("f").value="all";$("cmpbtn").textContent="Compare selected (0)";renderList();$("detail").textContent=""});
-renderList();var h=(location.hash||"").replace("#","");if(h&&D.companies.some(function(x){return x.org===h}))show(h);else if(D.companies.length)show(D.companies[0].org);
+renderList();var h=(location.hash||"").replace("#",""),wide=window.matchMedia&&window.matchMedia("(min-width:900px)").matches;if(h&&D.companies.some(function(x){return x.org===h}))show(h,false);else if(wide&&D.companies.length)show(D.companies[0].org,false);else $("detail").appendChild(el("div",{class:"empty",text:"Choose a company from the list to see its summary, facts and sources."}));
 })();
 </script>
 </body>

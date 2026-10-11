@@ -21,7 +21,7 @@ try {
   await page.screenshot({ path: `${out}/desktop-1-open.png` });
   await overflow(page, "desktop-open");
   const boxes = await page.$$("#list input[type=checkbox]");
-  await boxes[0].check(); await boxes[1].check(); await boxes[2].check();
+  await boxes[0].check({ timeout: 5000 }); await boxes[1].check({ timeout: 5000 }); await boxes[2].check({ timeout: 5000 });
   await page.click("#cmpbtn");
   await page.screenshot({ path: `${out}/desktop-2-compare.png` });
   await page.fill("#q", "as");
@@ -41,9 +41,9 @@ try {
   await page.goto(file); await page.waitForSelector("#list .card");
   await page.screenshot({ path: `${out}/mobile-1-list.png` });
   await overflow(page, "mobile-list");
-  const opens = await page.$$("#list button");
-  await opens[1].click();
-  await page.evaluate(() => document.getElementById("detail").scrollIntoView());
+  const opens = await page.$$("#list .openbtn");
+  await opens[1].click({ timeout: 5000 });
+  await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/mobile-2-detail.png` });
   await overflow(page, "mobile-detail");
   await page.screenshot({ path: `${out}/mobile-3-detail-full.png`, fullPage: true });

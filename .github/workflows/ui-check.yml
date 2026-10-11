@@ -17,6 +17,13 @@ jobs:
         run: |
           git fetch origin smoke-results
           git show origin/smoke-results:index.html > /tmp/demo.html
+          PYTHONPATH=src python - <<'PY'
+          import re
+          from norway_company_agent.viewer import TEMPLATE
+          old = open('/tmp/demo.html', encoding='utf-8').read()
+          data = re.search(r'<script id="data" type="application/json">(.*?)</script>', old, re.S).group(1)
+          open('/tmp/demo.html', 'w', encoding='utf-8').write(TEMPLATE.replace('__TITLE__', 'Signalpost company profiles').replace('__DATA__', data))
+          PY
           ls -l /tmp/demo.html
       - name: screenshots
         continue-on-error: true
