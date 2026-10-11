@@ -32,11 +32,11 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
 | Expected third-party cost | $0 per 100-company run |
-| Measured on CI (100 companies, live) | about 700 outbound requests (retries and redirects counted) and about 140 s, inside the 2,000 request / 45 minute budget |
+| Measured on CI (100 companies, live) | about 810 outbound requests (retries and redirects counted) and about 315 s, inside the 2,000 request / 45 minute budget |
 
 ## What it publishes
 
-Facts only from an official register or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
+Facts only from an official register (identity, legal status, business address, founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
 
 Role holders are published by name and role only; dates of birth are discarded.
 
