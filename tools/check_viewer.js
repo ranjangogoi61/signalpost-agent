@@ -1,7 +1,7 @@
 const {JSDOM,VirtualConsole}=require("jsdom");const fs=require("fs");
 const html=fs.readFileSync(process.argv[2],"utf8");const REQUIRE_NAMES_HIDDEN=process.argv[3]==="--names-hidden";const errors=[];
 const vc=new VirtualConsole();vc.on("jsdomError",e=>errors.push(String(e.message)));vc.on("error",e=>errors.push(String(e)));
-const dom=new JSDOM(html,{runScripts:"dangerously",virtualConsole:vc,url:"https://example.test/"});
+const dom=new JSDOM(html,{runScripts:"dangerously",virtualConsole:vc,url:"https://example.test/",beforeParse(window){window.matchMedia=function(q){return{matches:/min-width:\s*900px/.test(q),media:q,addListener(){},removeListener(){}}}}});
 const w=dom.window,d=w.document;const out={};
 out.title=d.getElementById("title").textContent;
 out.cards=d.querySelectorAll("#list .card").length;
