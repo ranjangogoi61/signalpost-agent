@@ -11,6 +11,7 @@ Method (deterministic, no search engine, no paid API, no LLM):
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import socket
 import time
@@ -21,7 +22,7 @@ from typing import Any, Callable
 
 from bs4 import BeautifulSoup
 
-from .discovery import BLOCKED_DISCOVERY_HOSTS
+from .discovery import BLOCKED_DISCOVERY_HOSTS, build_company_search_query, parse_brave_web_results
 from .evidence import evidence
 from .identity import apply_website_identity_gate, assess_social_identity
 from .website import (
@@ -38,6 +39,8 @@ from .website import (
 LEGAL_SUFFIXES = {"as", "asa", "ans", "da", "enk", "iks", "sa", "nuf", "ab", "ltd", "limited", "inc", "plc", "stiftelse", "stiftelsen"}
 PARKED_MARKERS = ("domain is for sale", "domain for sale", "hugedomains", "parked at", "this domain may be for sale", "domenet er til salgs")
 METHOD = "domain_guess_exact_org_number_v1"
+SEARCH_METHOD = "search_candidate_exact_org_number_v1"
+BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 MAX_CANDIDATES = 4
 MAX_EXTRA_PAGES = 2
 
@@ -89,6 +92,40 @@ def page_prints_org_number(html: str, org: str) -> bool:
     if any(marker in lowered for marker in PARKED_MARKERS):
         return False
     return bool(org_number_pattern(org).search(text))
+
+
+def make_brave_searcher(api_key: str, *, charge: Callable[[], bool] | None = None, timeout: float = 15.0, max_hosts: int = 3, opener: Callable[..., Any] | None = None) -> Callable[[dict[str, Any]], list[str]]:
+    """Candidate hostnames from a separately contracted Brave Search API key.
+
+    Search output is transient: only hostnames survive, and a host is published only if the page it
+    serves prints the company's exact organisation number. `charge` returns False once the declared
+    API budget is spent. Never scrapes a results page.
+    """
+    open_url = opener or urllib.request.urlopen
+
+    def searcher(profile: dict[str, Any]) -> list[str]:
+        try:
+            query = build_company_search_query(profile)
+        except ValueError:
+            return []
+        if charge is not None and not charge():
+            return []
+        params = urllib.parse.urlencode({"q": query, "count": 10, "country": "no", "search_lang": "nb", "safesearch": "moderate", "spellcheck": "0"})
+        request = urllib.request.Request(f"{BRAVE_ENDPOINT}?{params}", headers={"Accept": "application/json", "Accept-Encoding": "identity", "User-Agent": USER_AGENT, "X-Subscription-Token": api_key})
+        try:
+            with open_url(request, timeout=timeout) as response:
+                payload = json.loads(response.read())
+        except Exception:
+            return []
+        hosts: list[str] = []
+        for item in parse_brave_web_results(payload if isinstance(payload, dict) else {}, query=query):
+            host = (urllib.parse.urlparse(str(item.get("url") or "")).hostname or "").casefold().removeprefix("www.")
+            blocked = any(host == b or host.endswith("." + b) for b in BLOCKED_DISCOVERY_HOSTS)
+            if host and not blocked and host not in hosts:
+                hosts.append(host)
+        return hosts[:max_hosts]
+
+    return searcher
 
 
 def dns_resolves(host: str) -> bool:
@@ -167,11 +204,18 @@ def discover_website(
     fetch_page: Callable[[str], dict[str, Any]] = default_fetch_page,
     site_fetcher: Callable[..., tuple[dict[str, Any], dict[str, Any]]] = fetch_website,
     max_requests: int = 14,
+    searcher: Callable[[dict[str, Any]], list[str]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return (website evidence record, metrics). Never raises for a single company."""
     org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
     metrics = {"requests": 0, "bytes": 0, "latencies_ms": [], "candidates_tried": 0, "verified": False}
-    hosts = candidate_hosts(str(profile.get("name") or ""))
+    searched: list[str] = []
+    if searcher is not None:
+        try:
+            searched = list(searcher(profile))
+        except Exception:
+            searched = []
+    hosts = list(dict.fromkeys(searched + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 3]
     tried: list[dict[str, Any]] = []
     verified: dict[str, Any] | None = None
     for host in hosts:
@@ -185,7 +229,7 @@ def discover_website(
         metrics["requests"] += result["stats"]["requests"]
         metrics["bytes"] += result["stats"]["bytes"]
         metrics["latencies_ms"].extend(result["stats"]["latencies_ms"])
-        tried.append({"host": host, "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
+        tried.append({"host": host, "origin": "search" if host in searched else "name", "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
         if result["verified"]:
             verified = result
             break
@@ -201,8 +245,9 @@ def discover_website(
     if record.get("status") != "available":
         record["note"] = f"{record.get('note') or ''} Exact organisation number was printed on {verified['page_url']} but the full crawl failed.".strip()
         return record, metrics
-    gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=METHOD)
-    gated["value"]["discovery"] = {"method": METHOD, "candidates": tried, "verified_on": verified["page_url"]}
+    method = SEARCH_METHOD if verified["host"] in searched else METHOD
+    gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=method)
+    gated["value"]["discovery"] = {"method": method, "candidates": tried, "verified_on": verified["page_url"]}
     gated["source_type"] = "company_website_discovered_by_exact_org_number"
     gated["note"] = "Company-controlled page found without a registry link; published only because it prints the exact organisation number. Not an official registry fact."
     return gated, metrics

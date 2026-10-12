@@ -27,11 +27,11 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Item | Declaration |
 |---|---|
 | Language models | None |
-| Paid or keyed APIs | None |
+| Paid or keyed APIs | None by default. Optional: Brave Search API, used only if the operator sets `BRAVE_SEARCH_API_KEY`; about $0.005 per query, at most one query per company without a registry website, capped at $8 per 100 companies and reported in the run report |
 | Registry data | data.brreg.no (Enhetsregisteret, roles, subunits; Regnskapsregisteret accounts), NLOD 2.0 |
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
-| Expected third-party cost | $0 per 100-company run |
+| Expected third-party cost | $0 per 100-company run without a key; at most about $0.5 per 100 companies with one |
 | Measured on CI (100 companies, live) | about 810 outbound requests (retries and redirects counted) and about 315 s, inside the 2,000 request / 45 minute budget |
 
 ## What it publishes

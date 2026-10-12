@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from norway_company_agent.domain_discovery import discover_website, reverify_registry_website  # noqa: E402
+from norway_company_agent.domain_discovery import discover_website, make_brave_searcher, reverify_registry_website  # noqa: E402
 from norway_company_agent.evidence import utc_now  # noqa: E402
 from norway_company_agent.viewer import build_viewer  # noqa: E402
 from norway_company_agent.signalpost_run import AVAILABILITY_STATES, Budget, _failed_row_envelope, read_rows, run_batch, validate  # noqa: E402
@@ -52,6 +54,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--checkpoint-every", type=int, default=25, help="Accepted for compatibility with the reference kit; runs are short and always finish in one pass")
     parser.add_argument("--resume", action="store_true", help="Accepted for compatibility with the reference kit; every run recomputes all rows")
     parser.add_argument("--site-output", default=None, help="Offline HTML viewer path (default: <report dir>/site/index.html); pass an empty string to skip")
+    parser.add_argument("--no-search", action="store_true", help="Ignore BRAVE_SEARCH_API_KEY even when it is set")
+    parser.add_argument("--max-api-cost-per-100", type=float, default=8.0, help="Declared external API cost cap per 100 companies (USD)")
+    parser.add_argument("--search-cost-per-query", type=float, default=None, help="USD per search query (default: env BRAVE_COST_PER_QUERY_USD or 0.005)")
     parser.add_argument("--no-discovery", action="store_true", help="Do not look for websites of companies whose registry record has none")
     args, unknown = parser.parse_known_args(argv)
     if unknown:
@@ -61,6 +66,12 @@ def main(argv: list[str] | None = None) -> None:
     shards = max(1, math.ceil(len(rows) / 100))
     budget = Budget(args.max_requests_per_100 * shards, args.max_seconds_per_100 * shards)
     uninstall = budget.install()
+    api_key = os.environ.get("BRAVE_SEARCH_API_KEY", "").strip()
+    per_query = args.search_cost_per_query if args.search_cost_per_query is not None else float(os.environ.get("BRAVE_COST_PER_QUERY_USD", "0.005"))
+    searcher = None
+    if api_key and not args.no_search and not args.no_discovery:
+        cap = args.max_api_cost_per_100 * shards
+        searcher = make_brave_searcher(api_key, charge=lambda: budget.charge(per_query, cap))
     modules = [item.strip() for item in args.modules.split(",") if item.strip()]
     crashed: str | None = None
     try:
@@ -69,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
             previous = read_previous(args.profiles_output)
         envelopes, profiles, report = run_batch(
             rows, run_id=args.run_id, modules=modules, budget=budget, bulk_path=args.bulk, previous=previous, workers=args.workers,
-            discovery_fetcher=None if args.no_discovery else discover_website,
+            discovery_fetcher=None if args.no_discovery else functools.partial(discover_website, searcher=searcher),
             reverifier=None if args.no_discovery else reverify_registry_website,
         )
     except Exception as exc:  # last line of defence: still emit exactly one envelope per input row
@@ -92,6 +103,8 @@ def main(argv: list[str] | None = None) -> None:
         report["validation"]["passed"] = False
     finally:
         uninstall()
+    if isinstance(report.get("discovery"), dict):
+        report["discovery"]["search_provider"] = "brave_search_api" if searcher else None
     if args.expected_count is not None:
         report["validation"]["checks"]["matches_expected_count"] = len(rows) == args.expected_count
         report["validation"]["passed"] = all(report["validation"]["checks"].values())

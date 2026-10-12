@@ -30,6 +30,10 @@ FIELD_LABELS = {
     "secondary_industries": "secondary industries",
     "legal_status": "legal status",
     "annual_account_years": "filed annual accounts",
+    "careers_page": "careers page",
+    "news_page": "news page",
+    "contact_page": "contact page",
+    "contact_email": "contact email",
 }
 STATE_WORDS = {
     "not_available": "not found",
@@ -151,6 +155,13 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     site = claims.get("official_website")
     if _have(site):
         add(f"Its official website, confirmed as this exact company, is {site['value']}.", ["official_website"])
+
+    pages = [(f, label) for f, label in (("careers_page", "a careers page"), ("news_page", "a news page"), ("contact_page", "a contact page")) if _have(claims.get(f))]
+    if pages:
+        listing = ", ".join(f"{label} ({claims[f]['value']})" for f, label in pages)
+        add(f"Its website has {listing}.", [f for f, _ in pages])
+    if _have(claims.get("contact_email")):
+        add(f"Its website prints the contact email {claims['contact_email']['value']}.", ["contact_email"])
 
     refresh = envelope.get("refresh") or {}
     changes = envelope.get("changes") or []

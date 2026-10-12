@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
+import urllib.parse
 import threading
 import time
 import urllib.error
@@ -71,6 +73,8 @@ class Budget:
         self._lock = threading.Lock()
         self.requests = 0
         self.refused = 0
+        self.api_cost_usd = 0.0
+        self.api_calls = 0
 
     def elapsed(self) -> float:
         return self._clock() - self._start
@@ -83,6 +87,14 @@ class Budget:
 
     def fraction_used(self) -> float:
         return max(self.requests / self.max_requests if self.max_requests else 1.0, self.elapsed() / self.max_seconds if self.max_seconds else 1.0)
+
+    def charge(self, cost_usd: float, cap_usd: float) -> bool:
+        with self._lock:
+            if self.api_cost_usd + cost_usd > cap_usd:
+                return False
+            self.api_cost_usd += cost_usd
+            self.api_calls += 1
+            return True
 
     def acquire(self) -> None:
         with self._lock:
@@ -342,6 +354,37 @@ def module_availability(profile: dict[str, Any], module: str) -> tuple[str, str 
 
 
 
+
+PAGE_KINDS = (
+    ("careers_page", ("karriere", "career", "jobb", "ledige-stillinger", "stillinger")),
+    ("news_page", ("nyheter", "news", "aktuelt", "press", "blogg", "blog")),
+    ("contact_page", ("kontakt", "contact")),
+)
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def website_page_facts(value: dict[str, Any], legal_form: str = "") -> list[tuple[str, Any, str]]:
+    """Company-owned page facts from pages the crawler already fetched (no extra requests)."""
+    facts: list[tuple[str, Any, str]] = []
+    domain = str(value.get("registered_domain") or "")
+    seen: set[str] = set()
+    for page in value.get("pages") or []:
+        url = str(page.get("url") or "")
+        path = urllib.parse.urlparse(url).path.casefold()
+        for field, terms in PAGE_KINDS:
+            if field not in seen and any(term in path for term in terms):
+                seen.add(field)
+                facts.append((field, url, f"page {url} title={str(page.get('title') or '')[:80]}"))
+    if legal_form.upper() != "ENK" and domain:
+        for page in value.get("pages") or []:
+            for email in EMAIL_RE.findall(str(page.get("main_text_excerpt") or "")):
+                host = email.rsplit("@", 1)[1].casefold()
+                if host == domain or host.endswith("." + domain):
+                    facts.append(("contact_email", email.casefold(), f"page {page.get('url')} prints {email}"))
+                    return facts
+    return facts
+
+
 def _pick(row: dict[str, Any], path: str) -> Any:
     """Read a BRREG field from an API row (nested) or a bulk CSV row (flat dotted keys)."""
     if path in row:
@@ -469,6 +512,8 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
             add("website", "official_website", value.get("final_url"), f"{value.get('title') or ''} org={org}", float(assessment.get("score") or 0.0))
             add("website", "website_title", value.get("title"), f"title={value.get('title')}", float(assessment.get("score") or 0.0))
             add("website", "social_links", value.get("social_links"), f"social links on {value.get('final_url')}", float(assessment.get("score") or 0.0))
+            for field, page_value, span in website_page_facts(value, str(profile.get("legal_form") or "")):
+                add("website", field, page_value, span, float(assessment.get("score") or 0.0))
         else:
             claims.append(_claim("official_website", None, availability, [], None))
             if note and availability in ("failed", "blocked", "ambiguous"):
@@ -598,7 +643,8 @@ def run_batch(
             "runtime_ms": runtime_ms,
             "p50_ms": latencies[len(latencies) // 2] if latencies else None,
             "p95_ms": latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))] if latencies else None,
-            "third_party_cost_usd": 0,
+            "third_party_cost_usd": round(budget.api_cost_usd, 4),
+            "search_queries": budget.api_calls,
         },
         "budget": {"max_requests": budget.max_requests, "max_seconds": budget.max_seconds, "exhausted": budget.exhausted()},
         "discovery": {
