@@ -40,6 +40,12 @@ Facts only from an official register (identity, legal status, business address, 
 
 Role holders are published by name and role only; dates of birth are discarded.
 
+## Source rights, secrets and safe URL handling
+
+* **Source rights:** the register data is open (NLOD 2.0). Company pages are fetched only when robots.txt allows it, at most a homepage plus a handful of the company's own pages, and are published only with the company's exact organisation number as proof. Search-engine output (only if an operator key is set) is transient; only hostnames are kept.
+* **Secrets:** none in the repository. The optional `BRAVE_SEARCH_API_KEY` is read from the environment only, is never printed or written to any output, and the agent runs fully without it.
+* **Safe URL handling:** every URL is checked against private, loopback and link-local addresses before and after redirects (`assert_public_url`); redirects off the company's registered domain are not followed for page content; responses are size-limited.
+
 ## Synthesis and UX
 
 Each envelope has a deterministic, source-cited `synthesis`, and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.
