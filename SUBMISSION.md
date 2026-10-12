@@ -36,7 +36,7 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 
 ## What it publishes
 
-Facts only from an official register (identity, legal status, business address, founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
+Facts only from an official register (identity, legal status, business address, registered business activity and purpose, a corporate contact email (never free-mail or sole-proprietorship addresses, never phone numbers), founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
 
 Role holders are published by name and role only; dates of birth are discarded.
 

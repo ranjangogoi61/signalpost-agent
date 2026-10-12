@@ -30,6 +30,9 @@ FIELD_LABELS = {
     "secondary_industries": "secondary industries",
     "legal_status": "legal status",
     "annual_account_years": "filed annual accounts",
+    "business_activity": "registered business activity",
+    "registered_purpose": "registered purpose",
+    "registry_contact_email": "registry contact email",
     "careers_page": "careers page",
     "news_page": "news page",
     "contact_page": "contact page",
@@ -100,6 +103,12 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     if _have(status):
         text = "Its legal status in the register is active." if status["value"] == "active" else f"Its legal status in the register is flagged: {str(status['value']).replace('_', ' ')}."
         add(text, ["legal_status"])
+    activity = claims.get("business_activity")
+    if _have(activity):
+        text = str(activity["value"]).rstrip(".")
+        add(f"Its registered business activity: {text}.", ["business_activity"])
+    if _have(claims.get("registry_contact_email")):
+        add(f"The register lists the contact email {claims['registry_contact_email']['value']}.", ["registry_contact_email"])
     address = claims.get("business_address")
     if _have(address):
         add(f"Its registered business address is {address['value']}.", ["business_address"])

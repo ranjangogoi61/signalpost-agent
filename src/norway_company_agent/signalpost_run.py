@@ -406,7 +406,16 @@ def _address(row: dict[str, Any], key: str) -> str | None:
     return text or None
 
 
-def registry_extra_facts(row: dict[str, Any]) -> list[tuple[str, Any, str]]:
+FREE_MAIL = {"gmail.com", "googlemail.com", "hotmail.com", "hotmail.no", "outlook.com", "outlook.no", "live.com", "live.no", "yahoo.com", "yahoo.no", "icloud.com", "me.com", "online.no", "msn.com", "proton.me", "protonmail.com"}
+
+
+def _text_list(value: Any, limit: int = 400) -> str | None:
+    items = value if isinstance(value, list) else ([value] if value else [])
+    text = " ".join(" ".join(str(i).split()) for i in items if i).strip()
+    return (text[:limit].rstrip() + "...") if len(text) > limit else (text or None)
+
+
+def registry_extra_facts(row: dict[str, Any], legal_form: str = "") -> list[tuple[str, Any, str]]:
     """Official registry facts beyond the basics, each with the exact source span it comes from."""
     facts: list[tuple[str, Any, str]] = []
     address = _address(row, "forretningsadresse")
@@ -422,6 +431,15 @@ def registry_extra_facts(row: dict[str, Any]) -> list[tuple[str, Any, str]]:
     vat = _pick(row, "registrertIMvaregisteret")
     if isinstance(vat, bool) or str(vat).lower() in {"true", "false"}:
         facts.append(("vat_registered", str(vat).lower() == "true", f"registrertIMvaregisteret={vat}"))
+    activity = _text_list(_pick(row, "aktivitet"))
+    if activity:
+        facts.append(("business_activity", activity, f"aktivitet={activity[:120]}"))
+    purpose = _text_list(_pick(row, "vedtektsfestetFormaal"))
+    if purpose:
+        facts.append(("registered_purpose", purpose, f"vedtektsfestetFormaal={purpose[:120]}"))
+    email = str(_pick(row, "epostadresse") or "").strip().casefold()
+    if email and "@" in email and legal_form.upper() != "ENK" and email.rsplit("@", 1)[1] not in FREE_MAIL:
+        facts.append(("registry_contact_email", email, f"epostadresse={email}"))
     sector = _pick(row, "institusjonellSektorkode.beskrivelse")
     if sector:
         facts.append(("sector", str(sector), f"institusjonellSektorkode={sector}"))
@@ -487,7 +505,7 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
         add(reg_module, "municipality", profile.get("municipality") or None, f"{reg_span} kommune={profile.get('municipality')}")
         add(reg_module, "registered_website", profile.get("website") or None, f"{reg_span} hjemmeside={profile.get('website')}")
         raw = reg.get("value") if isinstance(reg.get("value"), dict) else {}
-        for field, value, span in registry_extra_facts(raw):
+        for field, value, span in registry_extra_facts(raw, str(profile.get("legal_form") or "")):
             add(reg_module, field, value, f"{reg_span} {span}")
     else:
         add(reg_module, "legal_name", None, reg_span)

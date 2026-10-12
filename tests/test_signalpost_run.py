@@ -19,7 +19,7 @@ from norway_company_agent.signalpost_run import (
 MODULES = ["registry", "accounting_obligation", "registry_live", "financials", "financial_history", "roles", "group", "locations", "website"]
 
 ENTITIES = {
-    "923609016": {"organisasjonsnummer": "923609016", "navn": "EQUINOR ASA", "organisasjonsform": {"kode": "ASA"}, "antallAnsatte": 21272, "hjemmeside": "www.equinor.com", "naeringskode1": {"kode": "06.100", "beskrivelse": "Utvinning av råolje"}, "forretningsadresse": {"adresse": ["Forusbeen 50"], "postnummer": "4035", "poststed": "STAVANGER", "land": "Norge", "kommune": "STAVANGER", "kommunenummer": "1103"}, "stiftelsesdato": "1972-09-18", "registreringsdatoEnhetsregisteret": "1995-01-01", "registrertIMvaregisteret": True, "institusjonellSektorkode": {"kode": "2100", "beskrivelse": "Private aksjeselskaper mv."}, "naeringskode2": {"kode": "06.200", "beskrivelse": "Utvinning av naturgass"}, "konkurs": False, "underAvvikling": False, "underTvangsavviklingEllerTvangsopploesning": False},
+    "923609016": {"organisasjonsnummer": "923609016", "navn": "EQUINOR ASA", "organisasjonsform": {"kode": "ASA"}, "antallAnsatte": 21272, "hjemmeside": "www.equinor.com", "naeringskode1": {"kode": "06.100", "beskrivelse": "Utvinning av råolje"}, "forretningsadresse": {"adresse": ["Forusbeen 50"], "postnummer": "4035", "poststed": "STAVANGER", "land": "Norge", "kommune": "STAVANGER", "kommunenummer": "1103"}, "stiftelsesdato": "1972-09-18", "registreringsdatoEnhetsregisteret": "1995-01-01", "registrertIMvaregisteret": True, "institusjonellSektorkode": {"kode": "2100", "beskrivelse": "Private aksjeselskaper mv."}, "naeringskode2": {"kode": "06.200", "beskrivelse": "Utvinning av naturgass"}, "konkurs": False, "underAvvikling": False, "underTvangsavviklingEllerTvangsopploesning": False, "aktivitet": ["Utvinning av olje og gass.", "Leting."], "epostadresse": "Post@Equinor.com"},
     "914778271": {"organisasjonsnummer": "914778271", "navn": "NORSK KAFFE AS", "organisasjonsform": {"kode": "AS"}, "antallAnsatte": 3, "hjemmeside": "", "naeringskode1": {"kode": "10.830", "beskrivelse": "Kaffe"}, "forretningsadresse": {"kommune": "OSLO", "kommunenummer": "0301"}},
 }
 
@@ -270,6 +270,21 @@ class ExtraRegistryFactsTests(unittest.TestCase):
         self.assertIn("registered business address is Forusbeen 50", text)
         self.assertIn("3 year(s), from 2023 to 2025", text)
         self.assertTrue(report["validation"]["passed"], report["validation"])
+
+    def test_activity_and_corporate_email_are_published_but_personal_contacts_are_not(self):
+        from norway_company_agent.signalpost_run import registry_extra_facts
+
+        envelopes, _, report, _ = run(["923609016"])
+        claims = {c["field"]: c for c in envelopes[0]["claims"]}
+        self.assertEqual(claims["business_activity"]["value"], "Utvinning av olje og gass. Leting.")
+        self.assertEqual(claims["registry_contact_email"]["value"], "post@equinor.com")
+        text = " ".join(s["text"] for s in envelopes[0]["synthesis"]["sentences"])
+        self.assertIn("registered business activity: Utvinning av olje og gass. Leting", text)
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+        row = {"epostadresse": "kari@gmail.com", "mobil": "459 66 866", "telefon": "22 33 44 55"}
+        self.assertEqual([f for f, _, _ in registry_extra_facts(row, "AS")], [])
+        self.assertEqual([f for f, _, _ in registry_extra_facts({"epostadresse": "post@firma.no"}, "ENK")], [])
+        self.assertEqual([f for f, _, _ in registry_extra_facts({"epostadresse": "post@firma.no"}, "AS")], ["registry_contact_email"])
 
     def test_missing_optional_fields_are_not_invented(self):
         envelopes, _, _, _ = run(["914778271"])
