@@ -27,6 +27,10 @@ Every envelope carries a deterministic `synthesis` (what the company is, what it
 
 Every run also writes an offline single-file viewer next to the report (`<report dir>/site/index.html`, or `--site-output`): search by name or organisation number, filter, open a company, compare 2 to 4 companies, and inspect each fact's source URL, retrieval time and SHA-256. It works on mobile and desktop and makes no external requests. `scripts/build_viewer.py` rebuilds it from an envelope file; `--hide-person-names` produces a public demo.
 
+## Jobs (NAV Arbeidsplassen feed)
+
+The official NAV job vacancy feed (`pam-stilling-feed.nav.no`, free under NAV's terms, MIT-licensed API) is scanned once per run with NAV's public experiment token (or `NAV_FEED_TOKEN` if the operator has a private one). Ads are matched by employer name, and an ad is published only if NAV's own record carries the company's exact organisation number. Only active, unexpired ads are kept (title, dates, municipality, public ad URL); descriptions and contact details are never stored or published. If the feed is unreachable or the scan is cut short by the budget, the jobs fact is `failed`, never `not_available`. Disable with `--no-jobs`.
+
 ## What it publishes
 
 Official sources only for facts: BRREG entity register, roles (dates of birth discarded), subunits, group links and Regnskapsregisteret accounts. A company website is published only when it is verified as the exact legal entity; otherwise the claim is `ambiguous` and carries no value.

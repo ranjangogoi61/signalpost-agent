@@ -33,6 +33,7 @@ FIELD_LABELS = {
     "business_activity": "registered business activity",
     "registered_purpose": "registered purpose",
     "registry_contact_email": "registry contact email",
+    "job_postings": "active job ads",
     "careers_page": "careers page",
     "news_page": "news page",
     "contact_page": "contact page",
@@ -165,6 +166,12 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     if _have(site):
         add(f"Its official website, confirmed as this exact company, is {site['value']}.", ["official_website"])
 
+    jobs = claims.get("job_postings")
+    if _have(jobs):
+        postings = jobs["value"]["postings"]
+        latest = postings[0]
+        when = f", the most recent published on {latest['published']}" if latest.get("published") else ""
+        add(f"It has {jobs['value']['active_count']} active job ad(s) on NAV's Arbeidsplassen{when} ({latest['title']}).", ["job_postings"])
     pages = [(f, label) for f, label in (("careers_page", "a careers page"), ("news_page", "a news page"), ("contact_page", "a contact page")) if _have(claims.get(f))]
     if pages:
         listing = ", ".join(f"{label} ({claims[f]['value']})" for f, label in pages)

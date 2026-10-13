@@ -29,6 +29,7 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Language models | None |
 | Paid or keyed APIs | None by default. Optional: Brave Search API, used only if the operator sets `BRAVE_SEARCH_API_KEY`; about $0.005 per query, at most one query per company without a registry website, capped at $8 per 100 companies and reported in the run report |
 | Registry data | data.brreg.no (Enhetsregisteret, roles, subunits; Regnskapsregisteret accounts), NLOD 2.0 |
+| Job ads | NAV Arbeidsplassen job vacancy feed (pam-stilling-feed.nav.no), NAV's public experiment token or an operator-supplied `NAV_FEED_TOKEN`; free under NAV's terms; active ads only, matched by exact organisation number, no descriptions or contact details kept |
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
 | Expected third-party cost | $0 per 100-company run without a key; at most about $0.5 per 100 companies with one |
@@ -36,7 +37,7 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 
 ## What it publishes
 
-Facts only from an official register (identity, legal status, business address, registered business activity and purpose, a corporate contact email (never free-mail or sole-proprietorship addresses, never phone numbers), founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
+Facts only from an official register (identity, legal status, business address, registered business activity and purpose, a corporate contact email (never free-mail or sole-proprietorship addresses, never phone numbers), founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, active job ads from NAV's open feed, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
 
 Role holders are published by name and role only; dates of birth are discarded.
 

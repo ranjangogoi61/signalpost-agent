@@ -15,10 +15,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.domain_discovery import discover_website, make_brave_searcher, reverify_registry_website  # noqa: E402
 from norway_company_agent.evidence import utc_now  # noqa: E402
+from norway_company_agent.nav_jobs import NavJobsIndex  # noqa: E402
 from norway_company_agent.viewer import build_viewer  # noqa: E402
 from norway_company_agent.signalpost_run import AVAILABILITY_STATES, Budget, _failed_row_envelope, read_rows, run_batch, validate  # noqa: E402
 
-DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,website"
+DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,website,jobs"
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-search", action="store_true", help="Ignore BRAVE_SEARCH_API_KEY even when it is set")
     parser.add_argument("--max-api-cost-per-100", type=float, default=8.0, help="Declared external API cost cap per 100 companies (USD)")
     parser.add_argument("--search-cost-per-query", type=float, default=None, help="USD per search query (default: env BRAVE_COST_PER_QUERY_USD or 0.005)")
+    parser.add_argument("--no-jobs", action="store_true", help="Skip the NAV job feed")
     parser.add_argument("--no-discovery", action="store_true", help="Do not look for websites of companies whose registry record has none")
     args, unknown = parser.parse_known_args(argv)
     if unknown:
@@ -72,7 +74,8 @@ def main(argv: list[str] | None = None) -> None:
     if api_key and not args.no_search and not args.no_discovery:
         cap = args.max_api_cost_per_100 * shards
         searcher = make_brave_searcher(api_key, charge=lambda: budget.charge(per_query, cap))
-    modules = [item.strip() for item in args.modules.split(",") if item.strip()]
+    modules = [item.strip() for item in args.modules.split(",") if item.strip() and not (args.no_jobs and item.strip() == "jobs")]
+    jobs_index = NavJobsIndex(token=os.environ.get("NAV_FEED_TOKEN", "").strip() or None, deadline=lambda: budget.fraction_used() > 0.4) if "jobs" in modules else None
     crashed: str | None = None
     try:
         previous = read_previous(args.previous)
@@ -82,6 +85,7 @@ def main(argv: list[str] | None = None) -> None:
             rows, run_id=args.run_id, modules=modules, budget=budget, bulk_path=args.bulk, previous=previous, workers=args.workers,
             discovery_fetcher=None if args.no_discovery else functools.partial(discover_website, searcher=searcher),
             reverifier=None if args.no_discovery else reverify_registry_website,
+            jobs_index=jobs_index,
         )
     except Exception as exc:  # last line of defence: still emit exactly one envelope per input row
         crashed = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -119,7 +123,7 @@ def main(argv: list[str] | None = None) -> None:
             Path(site_path).write_text(build_viewer(envelopes, report), encoding="utf-8")
         except Exception as exc:  # the viewer must never break the run
             print(f"warning: viewer not written: {exc}", file=sys.stderr)
-    print(json.dumps({k: report.get(k) for k in ("run_id", "expected_count", "emitted_envelopes", "operations", "discovery", "availability_totals", "validation", "error")}, ensure_ascii=False, indent=2))
+    print(json.dumps({k: report.get(k) for k in ("run_id", "expected_count", "emitted_envelopes", "operations", "discovery", "jobs_feed", "availability_totals", "validation", "error")}, ensure_ascii=False, indent=2))
     raise SystemExit(0 if report["validation"]["passed"] else 1)
 
 

@@ -30,6 +30,7 @@ def main() -> None:
         "budget": report["budget"],
         "registry_anchor": report["registry_anchor"],
         "discovery": report.get("discovery"),
+        "jobs_feed": report.get("jobs_feed"),
         "availability_totals": report["availability_totals"],
         "claims_by_field": {k: dict(v) for k, v in sorted(by_field.items())},
         "modules": {k: dict(v) for k, v in sorted(modules.items())},

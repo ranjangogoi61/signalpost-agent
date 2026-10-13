@@ -5,7 +5,7 @@ import copy
 import json
 from typing import Any
 
-FIELDS = ["legal_name", "legal_form", "legal_status", "business_address", "founded", "municipality", "industry", "employees", "financials_latest", "annual_account_years", "role_holders", "registered_locations", "official_website"]
+FIELDS = ["legal_name", "legal_form", "legal_status", "business_address", "founded", "municipality", "industry", "employees", "financials_latest", "annual_account_years", "job_postings", "role_holders", "registered_locations", "official_website"]
 
 
 def slim(envelope: dict[str, Any], hide_person_names: bool) -> dict[str, Any]:
@@ -94,7 +94,7 @@ var D=JSON.parse(document.getElementById("data").textContent);
 var $=function(id){return document.getElementById(id)};
 function el(tag,attrs,kids){var n=document.createElement(tag);attrs=attrs||{};Object.keys(attrs).forEach(function(k){if(k==="class")n.className=attrs[k];else if(k==="text")n.textContent=attrs[k];else n.setAttribute(k,attrs[k])});(kids||[]).forEach(function(c){if(c==null)return;n.appendChild(typeof c==="string"?document.createTextNode(c):c)});return n}
 var LABEL={available:"available",not_available:"not available",blocked:"blocked",not_applicable:"not applicable",ambiguous:"ambiguous",failed:"failed"};
-var FIELD={legal_name:"Legal name",legal_form:"Legal form",municipality:"Municipality",industry:"Industry",employees:"Employees",financials_latest:"Latest annual accounts",role_holders:"Role holders",registered_locations:"Subunits",official_website:"Official website",registered_website:"Website in registry",website_title:"Website title",social_links:"Social profiles",business_address:"Business address",postal_address:"Postal address",founded:"Founded",registered_on:"Entered in register",vat_registered:"VAT registered",sector:"Institutional sector",secondary_industries:"Secondary industries",legal_status:"Legal status",annual_account_years:"Filed annual accounts",business_activity:"Registered business activity",registered_purpose:"Registered purpose",registry_contact_email:"Registry contact email",careers_page:"Careers page",news_page:"News page",contact_page:"Contact page",contact_email:"Contact email"};
+var FIELD={legal_name:"Legal name",legal_form:"Legal form",municipality:"Municipality",industry:"Industry",employees:"Employees",financials_latest:"Latest annual accounts",role_holders:"Role holders",registered_locations:"Subunits",official_website:"Official website",registered_website:"Website in registry",website_title:"Website title",social_links:"Social profiles",business_address:"Business address",postal_address:"Postal address",founded:"Founded",registered_on:"Entered in register",vat_registered:"VAT registered",sector:"Institutional sector",secondary_industries:"Secondary industries",legal_status:"Legal status",annual_account_years:"Filed annual accounts",business_activity:"Registered business activity",registered_purpose:"Registered purpose",registry_contact_email:"Registry contact email",job_postings:"Active job ads",careers_page:"Careers page",news_page:"News page",contact_page:"Contact page",contact_email:"Contact email"};
 function badge(state){return el("span",{class:"badge "+state,text:LABEL[state]||state})}
 function safeUrl(u){return typeof u==="string"&&/^https?:\/\//i.test(u)}
 function link(u,t){return safeUrl(u)?el("a",{href:u,rel:"noopener noreferrer",target:"_blank",text:t||u}):el("span",{text:String(u)})}
@@ -103,6 +103,7 @@ function claimOf(c,f){for(var i=0;i<c.claims.length;i++)if(c.claims[i].field===f
 function valueText(f,v){
  if(v==null)return "";
  if(f==="vat_registered")return v?"Yes":"No";
+ if(f==="job_postings"&&v&&Array.isArray(v.postings))return v.active_count+" active: "+v.postings.slice(0,4).map(function(x){return x.title+(x.published?" ("+x.published+")":"")}).join("; ");
  if(f==="annual_account_years"&&Array.isArray(v))return v.length+" year(s): "+v.join(", ");
  if(f==="role_holders"&&Array.isArray(v))return v.length+" active: "+v.slice(0,6).map(function(r){return (r.role||"role")+(r.name?" - "+r.name:"")}).join("; ")+(v.length>6?" ...":"");
  if(f==="registered_locations"&&Array.isArray(v))return v.length+" subunit(s)";

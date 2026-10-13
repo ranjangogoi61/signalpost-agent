@@ -37,6 +37,7 @@ from .official import (
 )
 from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
+from .nav_jobs import NavJobsIndex, jobs_record
 from .synthesis import check_synthesis, summarize_envelope
 from .sampling import iter_bulk
 from .website import fetch_website
@@ -522,6 +523,9 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
     if "locations" in set(modules):
         locations = ((profile.get("evidence", {}).get("locations") or {}).get("value") or {}).get("locations") or []
         add("locations", "registered_locations", locations[:100], f"org={org} underenheter={len(locations)}")
+    if "jobs" in set(modules):
+        value = (profile.get("evidence", {}).get("jobs") or {}).get("value") or {}
+        add("jobs", "job_postings", {"active_count": value.get("active_count"), "postings": value.get("postings")} if value.get("postings") else None, f"org={org} NAV job feed: {value.get('active_count')} active ad(s) with this organisation number")
     if "website" in set(modules):
         availability, note = module_availability(profile, "website")
         value = ((profile.get("evidence", {}).get("website") or {}).get("value") or {})
@@ -584,16 +588,37 @@ def run_batch(
     discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = discover_website,
     discovery_soft_limit: float = 0.7,
     reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = reverify_registry_website,
+    jobs_index: NavJobsIndex | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     started_at = utc_now()
     t0 = time.monotonic()
     valid_orgs = list(dict.fromkeys(r["organisation_number"] for r in rows if r["organisation_number"]))
     module_set = set(modules)
-    fetch_modules = [m for m in modules if m not in {"registry", "accounting_obligation", "website"}]
+    fetch_modules = [m for m in modules if m not in {"registry", "accounting_obligation", "website", "jobs"}]
     profiles, anchor_meta = anchor_profiles(valid_orgs, bulk_path=bulk_path, modules=modules, fetcher=fetcher)
     operations = {"requests_by_phase": Counter(), "bytes": 0, "latencies_ms": []}
+    jobs_feed: dict[str, Any] | None = None
+    if jobs_index is not None and "jobs" in module_set:
+        before = budget.requests
+        try:
+            jobs_feed = dict(jobs_index.scan())
+        except Exception as exc:
+            jobs_feed = {"scanned": False, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+        operations["requests_by_phase"]["jobs_scan"] += budget.requests - before
+
+    def jobs_phase(profile: dict[str, Any]) -> None:
+        if "jobs" not in module_set or profile.get("anchor") == "none":
+            return
+        try:
+            record, metric = jobs_record(profile, jobs_index)
+        except Exception as exc:
+            record, metric = evidence("jobs", "source_error", "official_nav_job_feed", "https://pam-stilling-feed.nav.no/api/v1/feed", note=f"{type(exc).__name__}: {str(exc)[:160]}"), {"requests": 0}
+        profile["evidence"]["jobs"] = record
+        _add_metrics(profile, metric.get("requests", 0))
+        operations["requests_by_phase"]["jobs_confirm"] += metric.get("requests", 0)
 
     def phase_one(org: str) -> None:
+        jobs_phase(profiles[org])
         metric = _official_phase(profiles[org], module_set, budget, fetcher)
         operations["requests_by_phase"]["official"] += metric["requests"]
         operations["bytes"] += metric["bytes"]
@@ -670,6 +695,7 @@ def run_batch(
             "verified": sum(1 for p in profiles.values() if (p.get("discovery") or {}).get("verified")),
             "method": "domain_guess_exact_org_number_v1",
         },
+        "jobs_feed": jobs_feed,
         "availability_totals": {state: totals.get(state, 0) for state in AVAILABILITY_STATES},
         "validation": validate(rows, envelopes),
     }
