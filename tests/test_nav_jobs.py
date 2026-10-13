@@ -45,8 +45,8 @@ class FakeNav:
         url = request.full_url
         self.calls.append(url)
         if url.endswith("/api/publicToken"):
-            return Resp(self.token_status, b"PUBLICTOKEN") if self.token_status == 200 else (_ for _ in ()).throw(urllib.error.HTTPError(url, self.token_status, "x", {}, None))
-        assert request.get_header("Authorization") == "Bearer PUBLICTOKEN", "feed calls must carry the bearer token"
+            return Resp(self.token_status, b"Current public token for Nav Job Vacancy Feed:\naaaaaaaaaa.bbbbbbbbbb.cccccccccc\n") if self.token_status == 200 else (_ for _ in ()).throw(urllib.error.HTTPError(url, self.token_status, "x", {}, None))
+        assert request.get_header("Authorization") == "Bearer aaaaaaaaaa.bbbbbbbbbb.cccccccccc", "feed calls must carry the bearer token"
         if "/feedentry/" in url:
             uuid = url.rsplit("/", 1)[1]
             return Resp(200, self.entries[uuid]) if uuid in self.entries else (_ for _ in ()).throw(urllib.error.HTTPError(url, 404, "x", {}, None))
@@ -106,6 +106,31 @@ class NavJobsTests(unittest.TestCase):
         entries["a1"] = entry("a1", "914778271", status="INACTIVE")
         record, _ = jobs_record(PROFILE, NavJobsIndex(opener=FakeNav(pages, entries), now=lambda: NOW).__class__(opener=FakeNav(pages, entries), now=lambda: NOW))
         self.assertEqual(record["status"], "source_error")  # unscanned index never claims absence
+
+    def test_token_is_extracted_from_the_explanatory_text_nav_returns(self):
+        index, fake = self.index()
+        index.scan()
+        self.assertEqual(index._token, "aaaaaaaaaa.bbbbbbbbbb.cccccccccc")
+
+    def test_one_transient_timeout_is_retried(self):
+        pages, entries = standard()
+        inner = FakeNav(pages, entries)
+        state = {"failed": False}
+
+        def flaky(request, timeout=None):
+            if request.full_url.endswith("/api/publicToken") and not state["failed"]:
+                state["failed"] = True
+                raise TimeoutError("read timed out")
+            return inner(request, timeout)
+
+        import norway_company_agent.nav_jobs as nav
+        original = nav.time.sleep
+        nav.time.sleep = lambda s: None
+        try:
+            index = NavJobsIndex(opener=flaky, now=lambda: NOW)
+            self.assertTrue(index.scan()["scanned"])
+        finally:
+            nav.time.sleep = original
 
     def test_token_failure_is_a_source_error_not_a_crash(self):
         index, _ = self.index(token_status=500)

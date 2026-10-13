@@ -13,6 +13,7 @@ from __future__ import annotations
 import email.utils
 import hashlib
 import json
+import re
 import threading
 import time
 import urllib.request
@@ -31,13 +32,27 @@ MAX_CANDIDATES_PER_COMPANY = 4
 MAX_POSTINGS_PUBLISHED = 8
 
 
-def _open(url: str, headers: dict[str, str], timeout: float = 25.0, opener: Callable[..., Any] | None = None) -> tuple[int, bytes]:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **headers})
-    try:
-        with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
-            return int(getattr(response, "status", 200) or 200), response.read()
-    except urllib.error.HTTPError as exc:
-        return exc.code, b""
+JWT_RE = re.compile(r"[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
+
+
+def _open(url: str, headers: dict[str, str], timeout: float = 30.0, opener: Callable[..., Any] | None = None, attempts: int = 2) -> tuple[int, bytes]:
+    """GET with one retry for timeouts and 5xx; HTTP errors become (status, b"")."""
+    last: Exception | None = None
+    for attempt in range(attempts):
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **headers})
+        try:
+            with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
+                return int(getattr(response, "status", 200) or 200), response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500 or attempt == attempts - 1:
+                return exc.code, b""
+            last = exc
+        except (TimeoutError, OSError) as exc:
+            if "BudgetExceeded" in type(exc).__name__ or attempt == attempts - 1:
+                raise
+            last = exc
+        time.sleep(1.0 + attempt)
+    raise last or RuntimeError("request failed")
 
 
 def _parse_dt(value: Any) -> datetime | None:
@@ -73,11 +88,14 @@ class NavJobsIndex:
         status, body = _open(TOKEN_URL, {"Accept": "application/json, text/plain"}, opener=self._opener)
         if status != 200 or not body:
             raise RuntimeError(f"public token request returned HTTP {status}")
-        text = body.decode("utf-8", "replace").strip()
-        if text.startswith("{"):
+        text = body.decode("utf-8", "replace")
+        if text.lstrip().startswith("{"):
             data = json.loads(text)
-            text = str(data.get("token") or data.get("access_token") or "")
-        return text.strip().strip('"')
+            text = str(data.get("token") or data.get("access_token") or text)
+        match = JWT_RE.search(text)
+        if not match:
+            raise RuntimeError("public token response did not contain a token")
+        return match.group(0)
 
     def scan(self) -> dict[str, Any]:
         try:
