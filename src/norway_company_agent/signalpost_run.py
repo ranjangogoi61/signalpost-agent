@@ -598,7 +598,7 @@ def run_batch(
     profiles, anchor_meta = anchor_profiles(valid_orgs, bulk_path=bulk_path, modules=modules, fetcher=fetcher)
     operations = {"requests_by_phase": Counter(), "bytes": 0, "latencies_ms": []}
     jobs_feed: dict[str, Any] | None = None
-    if jobs_index is not None and "jobs" in module_set:
+    if jobs_index is not None and "jobs" in module_set and valid_orgs:
         before = budget.requests
         try:
             jobs_feed = dict(jobs_index.scan())

@@ -25,7 +25,7 @@ class CliTests(unittest.TestCase):
     def args(self, tmp, rows):
         source = Path(tmp) / "in.txt"
         source.write_text("\n".join(rows) + "\n", encoding="utf-8")
-        return ["--organisations", str(source), "--output", f"{tmp}/o/env.jsonl", "--profiles-output", f"{tmp}/o/prof.jsonl", "--report", f"{tmp}/o/rep.json", "--run-id", "t"]
+        return ["--organisations", str(source), "--output", f"{tmp}/o/env.jsonl", "--profiles-output", f"{tmp}/o/prof.jsonl", "--report", f"{tmp}/o/rep.json", "--run-id", "t", "--no-jobs", "--no-discovery"]
 
     def test_unknown_and_kit_flags_do_not_break_the_run(self):
         module = load()

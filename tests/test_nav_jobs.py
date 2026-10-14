@@ -158,6 +158,26 @@ class NavJobsTests(unittest.TestCase):
         self.assertEqual(metrics["requests"], 0)
 
 
+class NoNetworkGuardTests(unittest.TestCase):
+    def test_no_scan_when_there_is_no_valid_organisation_number(self):
+        calls = []
+        index = NavJobsIndex(opener=lambda request, timeout=None: calls.append(request.full_url) or Resp(200, b"x"), now=lambda: NOW)
+        run_batch(rows_for("x", "12"), run_id="t", modules=MODULES + ["jobs"], budget=Budget(1000, 1000), workers=1, fetcher=FakeApi(), site_fetcher=site_ok, discovery_fetcher=None, reverifier=None, jobs_index=index)
+        self.assertEqual(calls, [])
+
+    def test_lookback_window_is_sent_as_if_modified_since(self):
+        pages, entries = standard()
+        seen = []
+        inner = FakeNav(pages, entries)
+
+        def spy(request, timeout=None):
+            seen.append(request.get_header("If-modified-since"))
+            return inner(request, timeout)
+
+        NavJobsIndex(opener=spy, now=lambda: NOW, lookback_days=10).scan()
+        self.assertIn("Sat, 03 Oct 2026", [h for h in seen if h][0])
+
+
 class JobsIntegrationTests(unittest.TestCase):
     def test_jobs_flow_into_claims_summary_and_validation(self):
         pages, entries = standard()

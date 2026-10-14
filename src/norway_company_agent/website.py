@@ -15,6 +15,10 @@ from typing import Any
 from bs4 import BeautifulSoup
 import extruct
 import tldextract
+
+# Offline: use the public-suffix snapshot bundled with tldextract; never download it at run time
+# (that would be an uncounted outbound request and can fail inside a sandboxed evaluator).
+_TLD = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 import trafilatura
 
 from .evidence import evidence
@@ -78,7 +82,7 @@ def normalize_homepage(value: str | None) -> str | None:
 
 def _registered_domain(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
-    ext = tldextract.extract(parsed.hostname or "")
+    ext = _TLD(parsed.hostname or "")
     return ext.top_domain_under_public_suffix
 
 

@@ -69,16 +69,17 @@ def _parse_dt(value: Any) -> datetime | None:
 class NavJobsIndex:
     """One feed scan per run. Thread-safe for concurrent per-company lookups."""
 
-    def __init__(self, *, token: str | None = None, opener: Callable[..., Any] | None = None, now: Callable[[], datetime] | None = None, max_pages: int = 400, deadline: Callable[[], bool] | None = None) -> None:
+    def __init__(self, *, token: str | None = None, opener: Callable[..., Any] | None = None, now: Callable[[], datetime] | None = None, max_pages: int = 400, deadline: Callable[[], bool] | None = None, lookback_days: int = 45) -> None:
         self._token = token
         self._opener = opener
         self._now = now or (lambda: datetime.now(timezone.utc))
         self._max_pages = max_pages
+        self._lookback_days = lookback_days
         self._deadline = deadline or (lambda: False)
         self._ads: dict[str, dict[str, Any]] = {}
         self._by_name: dict[tuple[str, ...], list[str]] = {}
         self._lock = threading.Lock()
-        self.status: dict[str, Any] = {"scanned": False, "pages": 0, "items": 0, "active_ads": 0, "truncated": False, "error": None}
+        self.status: dict[str, Any] = {"scanned": False, "pages": 0, "items": 0, "active_ads": 0, "truncated": False, "error": None, "lookback_days": lookback_days}
 
     # ------------------------------------------------------------------ scan
     def _headers(self) -> dict[str, str]:
@@ -101,7 +102,7 @@ class NavJobsIndex:
         try:
             if not self._token:
                 self._token = self._fetch_token()
-            since = email.utils.formatdate((self._now() - timedelta(days=185)).timestamp(), usegmt=True)
+            since = email.utils.formatdate((self._now() - timedelta(days=self._lookback_days)).timestamp(), usegmt=True)
             url = FEED_FIRST
             seen_ads: dict[str, dict[str, Any]] = {}
             while url and self.status["pages"] < self._max_pages:

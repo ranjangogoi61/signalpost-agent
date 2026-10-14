@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-search", action="store_true", help="Ignore BRAVE_SEARCH_API_KEY even when it is set")
     parser.add_argument("--max-api-cost-per-100", type=float, default=8.0, help="Declared external API cost cap per 100 companies (USD)")
     parser.add_argument("--search-cost-per-query", type=float, default=None, help="USD per search query (default: env BRAVE_COST_PER_QUERY_USD or 0.005)")
+    parser.add_argument("--jobs-lookback-days", type=int, default=45, help="Only feed entries changed within this many days are scanned (ads rarely stay active longer)")
     parser.add_argument("--no-jobs", action="store_true", help="Skip the NAV job feed")
     parser.add_argument("--no-discovery", action="store_true", help="Do not look for websites of companies whose registry record has none")
     args, unknown = parser.parse_known_args(argv)
@@ -75,7 +76,7 @@ def main(argv: list[str] | None = None) -> None:
         cap = args.max_api_cost_per_100 * shards
         searcher = make_brave_searcher(api_key, charge=lambda: budget.charge(per_query, cap))
     modules = [item.strip() for item in args.modules.split(",") if item.strip() and not (args.no_jobs and item.strip() == "jobs")]
-    jobs_index = NavJobsIndex(token=os.environ.get("NAV_FEED_TOKEN", "").strip() or None, deadline=lambda: budget.fraction_used() > 0.4) if "jobs" in modules else None
+    jobs_index = NavJobsIndex(token=os.environ.get("NAV_FEED_TOKEN", "").strip() or None, deadline=lambda: budget.fraction_used() > 0.25, lookback_days=args.jobs_lookback_days) if "jobs" in modules else None
     crashed: str | None = None
     try:
         previous = read_previous(args.previous)
