@@ -12,6 +12,8 @@ Guarantees (each covered by tests/test_signalpost_run.py):
 """
 from __future__ import annotations
 
+import csv
+import gzip
 import hashlib
 import json
 import math
@@ -39,7 +41,7 @@ from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
 from .nav_jobs import NavJobsIndex, jobs_record
 from .synthesis import check_synthesis, summarize_envelope
-from .sampling import iter_bulk
+from .sampling import normalize_row
 from .website import fetch_website
 
 AVAILABILITY_STATES = ("available", "not_available", "blocked", "not_applicable", "ambiguous", "failed")
@@ -199,6 +201,29 @@ def _missing_profile(org: str, note: str, status: str, modules: Iterable[str]) -
     return profile
 
 
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def bulk_rows(path: str | Path):
+    """Stream a BRREG entity snapshot: gzip or plain CSV, any delimiter the sniffer finds."""
+    with open(path, "rb") as probe:
+        gzipped = probe.read(2) == b"\x1f\x8b"
+    opener = gzip.open if gzipped else open
+    with opener(path, "rt", encoding="utf-8-sig", newline="") as handle:
+        sample = handle.read(8192)
+        handle.seek(0)
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,\t")
+        for row in csv.DictReader(handle, dialect=dialect):
+            record = normalize_row(row)
+            if len(record["organisation_number"]) == 9:
+                yield record
+
+
 def anchor_profiles(
     orgs: list[str],
     *,
@@ -211,22 +236,25 @@ def anchor_profiles(
     found: dict[str, dict[str, Any]] = {}
     meta: dict[str, Any] = {"bulk_used": bool(bulk_path), "from_bulk": 0, "from_live_batch": 0, "from_direct": 0, "missing": 0}
     if bulk_path and Path(bulk_path).exists():
-        snapshot = hashlib.sha256(Path(bulk_path).read_bytes()).hexdigest()
-        retrieved = utc_now()
-        meta["registry_snapshot_sha256"] = snapshot
-        for profile in iter_bulk(bulk_path):
-            org = profile["organisation_number"]
-            if org not in wanted:
-                continue
-            raw = profile.pop("raw", {})
-            profile["evidence"] = {
-                "registry": evidence("registry", "available", "official_registry_bulk", "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv", value=raw, retrieved_at=retrieved, content_sha256=snapshot, source_row_key=org),
-            }
-            profile["evidence"]["accounting_obligation"] = accounting_obligation_assessment(profile)
-            profile["anchor"] = "bulk"
-            found[org] = profile
-            if len(found) == len(wanted):
-                break
+        try:
+            snapshot = _sha256_file(bulk_path)
+            retrieved = utc_now()
+            meta["registry_snapshot_sha256"] = snapshot
+            for profile in bulk_rows(bulk_path):
+                org = profile["organisation_number"]
+                if org not in wanted or org in found:
+                    continue
+                raw = profile.pop("raw", {})
+                profile["evidence"] = {
+                    "registry": evidence("registry", "available", "official_registry_bulk", "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv", value=raw, retrieved_at=retrieved, content_sha256=snapshot, source_row_key=org),
+                }
+                profile["evidence"]["accounting_obligation"] = accounting_obligation_assessment(profile)
+                profile["anchor"] = "bulk"
+                found[org] = profile
+                if len(found) == len(wanted):
+                    break
+        except Exception as exc:  # unreadable snapshot: fall back to the live registry for whatever is still missing
+            meta["bulk_error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
         meta["from_bulk"] = len(found)
     remaining = [org for org in orgs if org not in found]
     for start in range(0, len(remaining), 2000):
@@ -505,9 +533,11 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
         add(reg_module, "industry", profile.get("industry_label") or None, f"{reg_span} naeringskode1={profile.get('industry_code')}")
         add(reg_module, "municipality", profile.get("municipality") or None, f"{reg_span} kommune={profile.get('municipality')}")
         add(reg_module, "registered_website", profile.get("website") or None, f"{reg_span} hjemmeside={profile.get('website')}")
-        raw = reg.get("value") if isinstance(reg.get("value"), dict) else {}
+        # Extra facts come from the raw registry row (API row or bulk CSV row), which `registry` always holds.
+        raw_record = profile.get("evidence", {}).get("registry") or {}
+        raw = raw_record.get("value") if isinstance(raw_record.get("value"), dict) else {}
         for field, value, span in registry_extra_facts(raw, str(profile.get("legal_form") or "")):
-            add(reg_module, field, value, f"{reg_span} {span}")
+            add("registry", field, value, f"{reg_span} {span}")
     else:
         add(reg_module, "legal_name", None, reg_span)
     if "financial_history" in set(modules):
