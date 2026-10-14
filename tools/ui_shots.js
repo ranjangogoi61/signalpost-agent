@@ -20,12 +20,13 @@ try {
   await page.waitForSelector("#list .card");
   await page.screenshot({ path: `${out}/desktop-1-open.png` });
   await overflow(page, "desktop-open");
+  await page.click('.tabs button:nth-child(2)');
+  await page.screenshot({ path: `${out}/desktop-4-facts.png` });
+  await page.click('.tabs button:nth-child(1)');
   const boxes = await page.$$("#list input[type=checkbox]");
   await boxes[0].check({ timeout: 5000 }); await boxes[1].check({ timeout: 5000 }); await boxes[2].check({ timeout: 5000 });
   await page.click("#cmpbtn");
   await page.screenshot({ path: `${out}/desktop-2-compare.png` });
-  await page.click('.tabs button:nth-child(2)');
-  await page.screenshot({ path: `${out}/desktop-4-facts.png` });
   await page.fill("#q", "as");
   await page.selectOption("#f", "attention");
   await page.screenshot({ path: `${out}/desktop-3-filtered.png` });
