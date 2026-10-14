@@ -1,0 +1,6 @@
+desktop-open: scrollWidth=1440 innerWidth=1440 pageHeight=1128 horizontalOverflow=false
+desktop-filtered: scrollWidth=1440 innerWidth=1440 pageHeight=1322 horizontalOverflow=false
+mobile-list: scrollWidth=390 innerWidth=390 pageHeight=7119 horizontalOverflow=false
+mobile-detail: scrollWidth=390 innerWidth=390 pageHeight=8328 horizontalOverflow=false
+small tap targets (<40px high): ["INPUT:Select ARKITEKTFIRMA JON VIKØR","INPUT:Select FJELLGLØD HOLDING AS fo","INPUT:Select BEAUMONT HOLDING AS for","INPUT:Select WYSSEN NORGE AS for com","INPUT:Select BOAR COLLECT AS for com","INPUT:Select SAMEIET LENSMANNSTUNET ","INPUT:Select AAS ELEKTRONIKK AS for ","INPUT:Select SKYA MARKEDSFØRING AS f","INPUT:Select BRANDMAKER AS for compa","INPUT:Select BONDELIA I BORETTSLAG f","INPUT:Select ASPERIA AS for comparis","INPUT:Select EIENDOMSTILSYNET AS for"]
+page errors: []
