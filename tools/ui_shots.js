@@ -24,6 +24,8 @@ try {
   await boxes[0].check({ timeout: 5000 }); await boxes[1].check({ timeout: 5000 }); await boxes[2].check({ timeout: 5000 });
   await page.click("#cmpbtn");
   await page.screenshot({ path: `${out}/desktop-2-compare.png` });
+  await page.click('.tabs button:nth-child(2)');
+  await page.screenshot({ path: `${out}/desktop-4-facts.png` });
   await page.fill("#q", "as");
   await page.selectOption("#f", "attention");
   await page.screenshot({ path: `${out}/desktop-3-filtered.png` });
@@ -46,6 +48,9 @@ try {
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/mobile-2-detail.png` });
   await overflow(page, "mobile-detail");
+  await page.click(".tabs button:nth-child(2)");
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${out}/mobile-4-facts.png` });
   await page.screenshot({ path: `${out}/mobile-3-detail-full.png`, fullPage: true });
   const tap = await page.evaluate(() => Array.from(document.querySelectorAll("button,input,select")).filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.height < 40); }).map(e => e.tagName + ":" + (e.getAttribute("aria-label") || e.id || e.textContent).slice(0, 30)).slice(0, 12));
   report.push("small tap targets (<40px high): " + JSON.stringify(tap));
