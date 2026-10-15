@@ -414,16 +414,35 @@ def website_page_facts(value: dict[str, Any], legal_form: str = "") -> list[tupl
     return facts
 
 
+_ALIASES = {"underTvangsavviklingEllerTvangsopploesning": "underTvangsavviklingEllerTvangsopplosning"}
+
+
 def _pick(row: dict[str, Any], path: str) -> Any:
-    """Read a BRREG field from an API row (nested) or a bulk CSV row (flat dotted keys)."""
-    if path in row:
-        return row[path]
-    value: Any = row
-    for part in path.split("."):
-        if not isinstance(value, dict) or part not in value:
-            return None
-        value = value[part]
-    return value
+    """Read a BRREG field from an API row (nested) or a bulk CSV row (flat dotted keys).
+
+    Matching is case-insensitive because the bulk CSV spells some columns differently from the API
+    (e.g. registrertIMvaRegisteret vs registrertIMvaregisteret) and accepts the CSV's alias spellings.
+    """
+    wanted = [path, _ALIASES.get(path, path)]
+    lowered = {str(k).casefold(): k for k in row}
+    for candidate in wanted:
+        key = lowered.get(candidate.casefold())
+        if key is not None:
+            return row[key]
+    for candidate in wanted:
+        value: Any = row
+        for part in candidate.split("."):
+            if not isinstance(value, dict):
+                value = None
+                break
+            match = {str(k).casefold(): k for k in value}.get(part.casefold())
+            if match is None:
+                value = None
+                break
+            value = value[match]
+        if value is not None:
+            return value
+    return None
 
 
 def _address(row: dict[str, Any], key: str) -> str | None:

@@ -51,6 +51,17 @@ class BulkTests(unittest.TestCase):
             self.assertEqual(profiles["914778271"]["anchor"], "live_api")
             self.assertEqual((meta["from_bulk"], meta["from_live_batch"]), (1, 1))
 
+    def test_real_csv_column_spellings_are_matched(self):
+        from norway_company_agent.signalpost_run import registry_extra_facts
+
+        row = {"registreringsdatoenhetsregisteret": "2003-04-22", "registrertIMvaRegisteret": "true", "underTvangsavviklingEllerTvangsopplosning": "false", "konkurs": "false", "underAvvikling": "false", "stiftelsesdato": "2003-02-05"}
+        facts = {f: v for f, v, _ in registry_extra_facts(row, "AS")}
+        self.assertEqual(facts["registered_on"], "2003-04-22")
+        self.assertIs(facts["vat_registered"], True)
+        self.assertEqual(facts["legal_status"], "active")
+        flagged = {f: v for f, v, _ in registry_extra_facts({**row, "underTvangsavviklingEllerTvangsopplosning": "true"}, "AS")}
+        self.assertEqual(flagged["legal_status"], "under_forced_liquidation")
+
     def test_flat_csv_columns_produce_the_same_facts_as_the_api(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = write(tmp, "b.csv", None, True)
