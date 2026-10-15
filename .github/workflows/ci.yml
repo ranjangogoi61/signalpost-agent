@@ -33,6 +33,7 @@ jobs:
         run: |
           curl -fsSL https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv -o brreg-enheter.csv.gz
           ls -l brreg-enheter.csv.gz; head -c 2 brreg-enheter.csv.gz | od -An -tx1
+          (zcat brreg-enheter.csv.gz 2>/dev/null || cat brreg-enheter.csv.gz) | head -1 | tr ';,' '\n\n' | sed 's/"//g' > out/bulk-header.txt || true
           uv run python scripts/run_signalpost.py --organisations smoke-companies.jsonl --bulk brreg-enheter.csv.gz \
             --output out/envelopes-bulk.jsonl --profiles-output out/profiles-bulk.jsonl --report out/run-report-bulk.json \
             --run-id ci-bulk --expected-count 100 --no-jobs --no-discovery
@@ -58,8 +59,8 @@ jobs:
         run: |
           mkdir -p /tmp/results && cp out/summary.json out/run-report.json out/summary2.json /tmp/results/ 2>/dev/null || true
           cp out/demo/index.html /tmp/results/index.html 2>/dev/null || true
-          cp out/parity.json out/run-report-bulk.json /tmp/results/ 2>/dev/null || true
+          cp out/parity.json out/run-report-bulk.json out/bulk-header.txt /tmp/results/ 2>/dev/null || true
           git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
           git checkout --orphan smoke-results && git rm -rf -q . 2>/dev/null || true
-          cp /tmp/results/* . 2>/dev/null; git add summary.json run-report.json; [ -f summary2.json ] && git add summary2.json; [ -f index.html ] && git add index.html; [ -f parity.json ] && git add parity.json; [ -f run-report-bulk.json ] && git add run-report-bulk.json; git commit -q -m "smoke results for ${GITHUB_SHA::7}"
+          cp /tmp/results/* . 2>/dev/null; git add summary.json run-report.json; [ -f summary2.json ] && git add summary2.json; [ -f index.html ] && git add index.html; [ -f parity.json ] && git add parity.json; [ -f run-report-bulk.json ] && git add run-report-bulk.json; [ -f bulk-header.txt ] && git add bulk-header.txt; git commit -q -m "smoke results for ${GITHUB_SHA::7}"
           git push -f origin smoke-results

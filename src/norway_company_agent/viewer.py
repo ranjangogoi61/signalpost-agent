@@ -71,7 +71,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0 16px 24
 .badge{display:inline-flex;align-items:center;gap:2px;border-radius:999px;padding:1px 9px;font-size:.78rem;font-weight:600;white-space:nowrap;border:1px solid currentColor}
 .badge.available{color:var(--ok);background:var(--okbg)}.badge.not_available,.badge.not_applicable{color:var(--grey);background:var(--greybg)}.badge.ambiguous,.badge.blocked{color:var(--warn);background:var(--warnbg)}.badge.failed{color:var(--bad);background:var(--badbg)}
 .prog{height:6px;border-radius:99px;background:var(--greybg);overflow:hidden;margin:6px 0 2px}.prog i{display:block;height:100%;background:var(--accent)}
-.sel{outline:2px solid var(--accent)}.openbtn{width:100%;margin-top:6px}.more{width:100%;margin:2px 0 12px}
+.chk{display:inline-flex;padding:11px;margin:-11px -11px 0 0;cursor:pointer}.sel{outline:2px solid var(--accent)}.openbtn{width:100%;margin-top:6px}.more{width:100%;margin:2px 0 12px}
 .tabs{display:flex;gap:6px;margin:0 0 10px;overflow-x:auto}.tabs button{border-radius:999px;white-space:nowrap}.tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.actions button,.actions a{min-height:40px;padding:8px 12px;font-size:.9rem;display:inline-flex;align-items:center;text-decoration:none;border:1px solid var(--line);border-radius:10px;color:var(--ink);background:var(--card)}
 table{border-collapse:collapse;width:100%;font-size:.93rem}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:var(--muted);font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.03em}
@@ -140,7 +140,7 @@ function renderList(reset){if(reset!==false)shown=PAGE;var box=$("list");box.tex
   var b=el("button",{type:"button",class:"openbtn","aria-label":"Open "+c.name,text:"Open"});b.addEventListener("click",function(){show(c.org,true)});
   var cp=completeness(c);
   var card=el("div",{class:"card"+(sel[c.org]?" sel":""),role:"listitem"},[
-   el("div",{class:"cardtop"},[el("span",{class:"name",text:c.name}),cb]),
+   el("div",{class:"cardtop"},[el("span",{class:"name",text:c.name}),el("label",{class:"chk"},[cb])]),
    el("div",{class:"meta",text:"Org. "+c.org}),
    el("div",{class:"prog",role:"img","aria-label":cp[0]+" of "+cp[1]+" facts published"},[el("i",{style:"width:"+Math.round(100*cp[0]/Math.max(1,cp[1]))+"%"})]),
    el("div",{class:"meta",text:cp[0]+" of "+cp[1]+" facts published"}),
