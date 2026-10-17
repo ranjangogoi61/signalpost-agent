@@ -18,7 +18,7 @@ uv run python scripts/run_signalpost.py \
   --expected-count <N>
 ```
 
-Optional: `--bulk <brreg-enheter.csv>` (frozen BRREG snapshot; the live registry is used without it), `--previous <earlier profiles.jsonl>` (refresh / material changes), `--no-discovery`, `--max-requests-per-100` (default 1900), `--max-seconds-per-100` (default 2400), `--workers` (default 8).
+Optional: `--bulk <brreg snapshot, gzip or plain CSV>` (frozen BRREG snapshot, verified live against the API run on the same 100 companies; an unreadable snapshot falls back to the live registry; the live registry is used without it), `--previous <earlier profiles.jsonl>` (refresh / material changes), `--no-discovery`, `--max-requests-per-100` (default 1900), `--max-seconds-per-100` (default 2400), `--workers` (default 8).
 
 The agent reads whatever batch it is given; it assumes no company count. The reference kit's flags (`--resume`, `--checkpoint-every`) are accepted and unknown flags are ignored with a warning. If the run aborts unexpectedly it still writes one `failed` envelope per input row and exits 1 with the error in the report.
 
@@ -33,7 +33,7 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
 | Expected third-party cost | $0 per 100-company run without a key; at most about $0.5 per 100 companies with one |
-| Measured on CI (100 companies, live) | about 810 outbound requests (retries and redirects counted) and about 315 s, inside the 2,000 request / 45 minute budget |
+| Measured on CI (100 companies, live) | about 920 outbound requests (retries and redirects counted, about 95 of them the NAV feed scan) and about 410 s, inside the 2,000 request / 45 minute budget. The `--bulk` snapshot path on the same 100 companies: 643 requests, about 235 s |
 
 ## What it publishes
 
@@ -46,6 +46,10 @@ Role holders are published by name and role only; dates of birth are discarded.
 * **Source rights:** the register data is open (NLOD 2.0). Company pages are fetched only when robots.txt allows it, at most a homepage plus a handful of the company's own pages, and are published only with the company's exact organisation number as proof. Search-engine output (only if an operator key is set) is transient; only hostnames are kept.
 * **Secrets:** none in the repository. The optional `BRAVE_SEARCH_API_KEY` is read from the environment only, is never printed or written to any output, and the agent runs fully without it.
 * **Safe URL handling:** every URL is checked against private, loopback and link-local addresses before and after redirects (`assert_public_url`); redirects off the company's registered domain are not followed for page content; responses are size-limited.
+
+## Verification
+
+CI runs on every push to `dev`: unit tests (no network allowed), a live 100-company run, a same-input refresh run (0 false changes), a live `--bulk` snapshot run with a field-by-field parity check against the live run (`parity.json` on the `smoke-results` branch), and a headless-browser check of the viewer.
 
 ## Synthesis and UX
 

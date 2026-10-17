@@ -16,7 +16,7 @@ uv sync --frozen && uv run python scripts/run_signalpost.py \
   --expected-count <N>
 ```
 
-* `--bulk <brreg-enheter.csv>` is optional. Without it the identity anchor is the live BRREG register (chunked organisation-number query, direct lookup only for numbers the query does not return).
+* `--bulk <snapshot>` is optional (gzip or plain CSV; case-insensitive column matching; an unreadable file falls back to the live registry). Without it the identity anchor is the live BRREG register (chunked organisation-number query, direct lookup only for numbers the query does not return).
 * Refresh: run again with the same `--profiles-output`, or pass `--previous <earlier profiles.jsonl>`; material changes are written to each envelope's `changes`.
 * Budget (retries and redirects count): `--max-requests-per-100` (default 1900) and `--max-seconds-per-100` (default 2400) per 100 companies. When the budget is nearly used the optional website phase is skipped and marked `failed` (`budget_exhausted`); the official registry phase always runs first.
 * Company count is never assumed: the agent processes whatever batch it is given.
