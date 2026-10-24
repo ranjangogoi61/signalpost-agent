@@ -51,6 +51,12 @@ Role holders are published by name and role only; dates of birth are discarded.
 
 CI runs on every push to `dev`: unit tests (no network allowed), a live 100-company run, a same-input refresh run (0 false changes), a live `--bulk` snapshot run with a field-by-field parity check against the live run (`parity.json` on the `smoke-results` branch), and a headless-browser check of the viewer.
 
+## Precision rules (from Builderr's audit)
+
+* A website's social profiles, news, careers and contact facts are withheld (`ambiguous`) unless the page prints the company's exact organisation number and lists at most two other organisations, so a parent group's or directory's site is never attributed to a subsidiary.
+* A social profile is published only if its handle equals the company's name.
+* The agent returns a result for every company without any search key; Builderr's official runs are keyless.
+
 ## Synthesis and UX
 
 Each envelope has a deterministic, source-cited `synthesis`, and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.

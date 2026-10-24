@@ -110,7 +110,10 @@ class PageFactsEndToEnd(unittest.TestCase):
             value = {"requested_url": url, "final_url": "https://equinor.com/", "registered_domain": "equinor.com", "title": "Equinor ASA energy company", "description": "", "main_text_excerpt": "Equinor ASA is an energy company. " * 10, "social_links": [], "structured_organisations": [], "pages": [{"url": "https://equinor.com/careers", "title": "Careers", "main_text_excerpt": ""}, {"url": "https://equinor.com/contact", "title": "Contact", "main_text_excerpt": "press@equinor.com"}]}
             return evidence("website", "available", "registry_linked_company_website", "https://equinor.com/", value=value, content_sha256="f" * 64), {"requests": 2, "bytes": 1, "latencies_ms": [1]}
 
-        envelopes, _, report, _ = run(["923609016"], site=site_with_pages)
+        from norway_company_agent.domain_discovery import reverify_registry_website
+
+        own = lambda url: {"ok": True, "url": url, "final_url": url, "html": "<footer>Org.nr 923 609 016</footer>", "requests": 2, "bytes": 30, "latency_ms": 4}
+        envelopes, _, report, _ = run(["923609016"], site=site_with_pages, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=own))
         claims = {c["field"]: c for c in envelopes[0]["claims"]}
         self.assertEqual(claims["careers_page"]["value"], "https://equinor.com/careers")
         self.assertEqual(claims["contact_email"]["value"], "press@equinor.com")
@@ -118,6 +121,87 @@ class PageFactsEndToEnd(unittest.TestCase):
         text = " ".join(x["text"] for x in envelopes[0]["synthesis"]["sentences"])
         self.assertIn("a careers page", text)
         self.assertTrue(report["validation"]["passed"], report["validation"])
+
+
+def make_valid(prefix8: str) -> str:
+    total = sum(int(d) * w for d, w in zip(prefix8, (3, 2, 7, 6, 5, 4, 3, 2)))
+    check = 11 - (total % 11)
+    check = 0 if check == 11 else check
+    return prefix8 + str(check)
+
+
+class OwnershipTests(unittest.TestCase):
+    def test_check_digit_validation(self):
+        from norway_company_agent.domain_discovery import valid_org_number
+
+        self.assertTrue(valid_org_number("923609016"))
+        self.assertTrue(valid_org_number("923 609 016"))
+        self.assertFalse(valid_org_number("923609017"))
+        self.assertFalse(valid_org_number("12345"))
+
+    def group_page(self, others):
+        listed = " ".join(f"Org.nr {make_valid(str(10000000 + i * 37))}" for i in range(others))
+        return lambda url: page(f"<footer>Org.nr 914 778 271 {listed}</footer>", url)
+
+    def test_site_listing_many_organisations_is_not_taken_as_the_companys_own(self):
+        record, _ = discover_website(PROFILE, resolver=lambda h: True, fetch_page=self.group_page(3), site_fetcher=site)
+        self.assertEqual(record["status"], "not_found")
+        record, _ = discover_website(PROFILE, resolver=lambda h: True, fetch_page=self.group_page(2), site_fetcher=site)
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(record["value"]["identity_assessment"]["ownership"], "proven")
+        self.assertEqual(record["value"]["identity_assessment"]["other_org_numbers_on_page"], 2)
+
+    def test_phone_numbers_and_postcodes_are_not_counted_as_other_companies(self):
+        html = "<footer>Org.nr 914 778 271. Tlf 22 33 44 55, mobil 900 12 345, 0155 Oslo, 123 456 789 kr</footer>"
+        from norway_company_agent.domain_discovery import other_org_numbers
+
+        self.assertEqual(other_org_numbers(html, "914778271"), 0)
+
+    def test_unproven_website_withholds_social_news_jobs_and_contact(self):
+        from test_signalpost_run import run
+
+        def group_like(url):
+            value = {"requested_url": url, "final_url": "https://equinor.com/", "registered_domain": "equinor.com", "title": "Equinor ASA energy company", "description": "", "main_text_excerpt": "Equinor ASA is an energy company. " * 10, "social_links": [{"platform": "facebook", "url": "https://facebook.com/equinor"}], "discovered_social_links": [], "structured_organisations": [], "pages": [{"url": "https://equinor.com/careers", "title": "Careers", "main_text_excerpt": ""}]}
+            return evidence("website", "available", "registry_linked_company_website", "https://equinor.com/", value=value, content_sha256="f" * 64), {"requests": 1, "bytes": 1, "latencies_ms": [1]}
+
+        envelopes, _, report, _ = run(["923609016"], site=group_like)
+        claims = {c["field"]: c for c in envelopes[0]["claims"]}
+        for field in ("social_links", "careers_page", "news_page", "contact_page", "contact_email"):
+            self.assertEqual(claims[field]["availability"], "ambiguous", field)
+            self.assertIsNone(claims[field]["value"])
+        self.assertEqual(claims["official_website"]["availability"], "available")
+        self.assertLessEqual(claims["official_website"]["confidence"], 0.6)
+        self.assertTrue(any(e["field"] == "website_facts" for e in envelopes[0]["errors"]))
+        self.assertTrue(report["validation"]["passed"], report["validation"])
+
+    def test_reverify_does_not_upgrade_a_group_page(self):
+        from norway_company_agent.domain_discovery import reverify_registry_website
+
+        record = site("https://equinor.com/")[0]
+        record["value"]["identity_assessment"] = {"publishable": False}
+        listed = " ".join(f"Org.nr {make_valid(str(20000000 + i * 41))}" for i in range(4))
+        fetch = lambda url: page(f"<p>Org.nr 914 778 271 {listed}</p>", url)
+        upgraded, _ = reverify_registry_website(PROFILE, record, fetch_page=fetch)
+        self.assertNotEqual(upgraded["value"]["identity_assessment"].get("ownership"), "proven")
+
+
+class StrictSocialTests(unittest.TestCase):
+    def assess(self, url, name="NORSK KAFFE AS"):
+        from norway_company_agent.domain_discovery import assess_social_strict
+
+        return assess_social_strict({"name": name}, {"platform": "x", "url": url})["publishable"]
+
+    def test_exact_handles_are_accepted(self):
+        for url in ("https://facebook.com/norskkaffe", "https://www.instagram.com/norsk_kaffe/", "https://linkedin.com/company/norsk-kaffe-as", "https://x.com/NorskKaffeNorge", "https://facebook.com/pages/Norsk-Kaffe-AS/100064123456789", "https://facebook.com/norskkaffe-100064123456"):
+            self.assertTrue(self.assess(url), url)
+
+    def test_parent_group_agency_and_substring_handles_are_rejected(self):
+        for url in ("https://facebook.com/norskkaffegruppen", "https://linkedin.com/company/norsk-kaffe-group", "https://instagram.com/kaffe", "https://facebook.com/webbyraa/norskkaffe", "https://twitter.com/themeforest", "https://facebook.com/sharer/sharer.php"):
+            self.assertFalse(self.assess(url), url)
+
+    def test_short_or_generic_names_are_never_matched(self):
+        self.assertFalse(self.assess("https://facebook.com/ark", "ARK AS"))
+        self.assertFalse(self.assess("https://facebook.com/arkitekter", "ARK AS"))
 
 
 if __name__ == "__main__":

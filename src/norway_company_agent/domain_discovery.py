@@ -83,6 +83,34 @@ def org_number_pattern(org: str) -> re.Pattern[str]:
     return re.compile(rf"(?<!\d){digits[:3]}{sep}{digits[3:6]}{sep}{digits[6:]}(?!\d)")
 
 
+MAX_OTHER_ORGS = 2
+ANY_ORG_RE = re.compile(r"(?<!\d)\d{3}[\s.\u00a0\u202f]?\d{3}[\s.\u00a0\u202f]?\d{3}(?!\d)")
+
+
+def valid_org_number(number: str) -> bool:
+    """Norwegian organisation number check digit (modulus 11), so phone numbers and postcodes do not count."""
+    digits = re.sub(r"\D", "", number)
+    if len(digits) != 9:
+        return False
+    total = sum(int(d) * w for d, w in zip(digits[:8], (3, 2, 7, 6, 5, 4, 3, 2)))
+    check = 11 - (total % 11)
+    check = 0 if check == 11 else check
+    return check != 10 and check == int(digits[8])
+
+
+def _visible_text(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    return soup.get_text(" ", strip=True)
+
+
+def other_org_numbers(html: str, org: str) -> int:
+    """How many distinct valid organisation numbers other than ours the page prints (group sites list many)."""
+    found = {re.sub(r"\D", "", m.group(0)) for m in ANY_ORG_RE.finditer(_visible_text(html))}
+    return len({n for n in found if n != org and valid_org_number(n)})
+
+
 def page_prints_org_number(html: str, org: str) -> bool:
     soup = BeautifulSoup(html, "lxml")
     for tag in soup(["script", "style", "noscript"]):
@@ -126,6 +154,47 @@ def make_brave_searcher(api_key: str, *, charge: Callable[[], bool] | None = Non
         return hosts[:max_hosts]
 
     return searcher
+
+
+SOCIAL_SUFFIXES = ("", "as", "asa", "no", "norge", "norway", "official")
+
+
+def social_slug(url: str) -> str:
+    """The page handle of a social profile URL, compacted (company/<slug> on LinkedIn, first segment elsewhere)."""
+    parsed = urllib.parse.urlparse(url or "")
+    host = (parsed.hostname or "").casefold()
+    segments = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
+    slug = ""
+    if "linkedin." in host:
+        for marker in ("company", "school"):
+            if marker in segments and segments.index(marker) + 1 < len(segments):
+                slug = segments[segments.index(marker) + 1]
+                break
+    elif "facebook." in host and segments and segments[0] in {"pages", "p", "people"} and len(segments) > 1:
+        slug = segments[1]
+    elif segments:
+        slug = segments[0]
+    slug = re.sub(r"[-_.]?\d{6,}$", "", slug.lstrip("@"))
+    return re.sub(r"[^a-z0-9]", "", _fold(slug))
+
+
+def assess_social_strict(profile: dict[str, Any], link: dict[str, str]) -> dict[str, Any]:
+    """A social profile is the company's own only if its handle IS the company's name (optionally with AS/NO/NORGE).
+
+    Substring matching is not enough: `norskkaffegruppen` contains `norskkaffe` but belongs to the parent group.
+    """
+    core = "".join(name_tokens(str(profile.get("name") or "")))
+    slug = social_slug(link.get("url") or "")
+    allowed = {core + suffix for suffix in SOCIAL_SUFFIXES} if len(core) >= 4 else set()
+    publishable = bool(slug) and slug in allowed
+    return {
+        **link,
+        "identity_score": 0.98 if publishable else 0.2,
+        "publishable": publishable,
+        "matched_tokens": name_tokens(str(profile.get("name") or "")) if publishable else [],
+        "reason": "social handle equals the legal name" if publishable else "social handle is not exactly this company's name (it may belong to a parent group, an agency or a theme)",
+        "method": "strict_social_handle_v1",
+    }
 
 
 def dns_resolves(host: str) -> bool:
@@ -181,8 +250,18 @@ def verify_host(host: str, org: str, fetch_page: Callable[[str], dict[str, Any]]
         out["error"] = home.get("error")
         return out
     out["final_url"] = home["final_url"]
-    if page_prints_org_number(home["html"], org):
-        out.update(verified=True, page_url=home["final_url"])
+
+    def proves_ownership(page: dict[str, Any]) -> bool:
+        if not page_prints_org_number(page["html"], org):
+            return False
+        others = other_org_numbers(page["html"], org)
+        if others > MAX_OTHER_ORGS:
+            out["error"] = "page prints this organisation number among many others (group site or directory)"
+            return False
+        out.update(verified=True, page_url=page["final_url"], others=others)
+        return True
+
+    if proves_ownership(home):
         return out
     soup = BeautifulSoup(home["html"], "lxml")
     home_domain = _registered_domain(home["final_url"])
@@ -191,8 +270,7 @@ def verify_host(host: str, org: str, fetch_page: Callable[[str], dict[str, Any]]
             continue
         page = fetch_page(link)
         take(page)
-        if page.get("ok") and page_prints_org_number(page["html"], org):
-            out.update(verified=True, page_url=page["final_url"])
+        if page.get("ok") and proves_ownership(page):
             return out
     return out
 
@@ -246,14 +324,14 @@ def discover_website(
         record["note"] = f"{record.get('note') or ''} Exact organisation number was printed on {verified['page_url']} but the full crawl failed.".strip()
         return record, metrics
     method = SEARCH_METHOD if verified["host"] in searched else METHOD
-    gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=method)
+    gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=method, others=int(verified.get("others") or 0))
     gated["value"]["discovery"] = {"method": method, "candidates": tried, "verified_on": verified["page_url"]}
     gated["source_type"] = "company_website_discovered_by_exact_org_number"
     gated["note"] = "Company-controlled page found without a registry link; published only because it prints the exact organisation number. Not an official registry fact."
     return gated, metrics
 
 
-def mark_verified_by_org_number(profile: dict[str, Any], record: dict[str, Any], page_url: str, *, method: str) -> dict[str, Any]:
+def mark_verified_by_org_number(profile: dict[str, Any], record: dict[str, Any], page_url: str, *, method: str, others: int = 0) -> dict[str, Any]:
     """Mark a fetched website as the exact legal entity because it prints the organisation number."""
     org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
     gated = apply_website_identity_gate(profile, record)["website"]
@@ -266,8 +344,10 @@ def mark_verified_by_org_number(profile: dict[str, Any], record: dict[str, Any],
         "matched_tokens": [],
         "reasons": [f"exact organisation number {org} is printed on {page_url}"],
         "method": method,
+        "ownership": "proven",
+        "other_org_numbers_on_page": others,
     }
-    assessments = [assess_social_identity(profile, link) for link in value.get("discovered_social_links") or []]
+    assessments = [assess_social_strict(profile, link) for link in value.get("discovered_social_links") or []]
     value["social_link_assessments"] = assessments
     value["social_links"] = [{"platform": a["platform"], "url": a["url"]} for a in assessments if a["publishable"]]
     gated["value"] = value
@@ -283,7 +363,7 @@ def reverify_registry_website(
     *,
     fetch_page: Callable[[str], dict[str, Any]] = default_fetch_page,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Second look at a registry-linked website the name-based gate left unverified.
+    """Second look at a registry-linked website whose ownership is not yet proven (the name-based gate cannot tell a company's own site from its parent group's).
 
     The kit's gate reads boilerplate-stripped text, which usually drops the footer where the
     organisation number is printed. This re-checks the raw homepage and at most two contact
@@ -291,7 +371,7 @@ def reverify_registry_website(
     """
     metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
     value = record.get("value") or {}
-    if record.get("status") != "available" or (value.get("identity_assessment") or {}).get("publishable"):
+    if record.get("status") != "available" or (value.get("identity_assessment") or {}).get("ownership") == "proven":
         return record, metrics
     host = urllib.parse.urlparse(value.get("final_url") or "").hostname
     org = re.sub(r"\D", "", str(profile.get("organisation_number") or ""))
@@ -303,6 +383,6 @@ def reverify_registry_website(
     metrics["latencies_ms"].extend(result["stats"]["latencies_ms"])
     if not result["verified"]:
         return record, metrics
-    upgraded = mark_verified_by_org_number(profile, record, result["page_url"], method=REGISTRY_METHOD)
+    upgraded = mark_verified_by_org_number(profile, record, result["page_url"], method=REGISTRY_METHOD, others=int(result.get("others") or 0))
     upgraded["value"]["reverified_by"] = {"method": REGISTRY_METHOD, "verified_on": result["page_url"]}
     return upgraded, metrics

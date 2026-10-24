@@ -580,11 +580,18 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
         value = ((profile.get("evidence", {}).get("website") or {}).get("value") or {})
         assessment = value.get("identity_assessment") or {}
         if availability == "available":
-            add("website", "official_website", value.get("final_url"), f"{value.get('title') or ''} org={org}", float(assessment.get("score") or 0.0))
-            add("website", "website_title", value.get("title"), f"title={value.get('title')}", float(assessment.get("score") or 0.0))
-            add("website", "social_links", value.get("social_links"), f"social links on {value.get('final_url')}", float(assessment.get("score") or 0.0))
-            for field, page_value, span in website_page_facts(value, str(profile.get("legal_form") or "")):
-                add("website", field, page_value, span, float(assessment.get("score") or 0.0))
+            proven = assessment.get("ownership") == "proven"
+            confidence = float(assessment.get("score") or 0.0) if proven else min(float(assessment.get("score") or 0.0), 0.6)
+            add("website", "official_website", value.get("final_url"), f"{value.get('title') or ''} org={org}", confidence)
+            add("website", "website_title", value.get("title"), f"title={value.get('title')}", confidence)
+            derived = [("social_links", value.get("social_links"), f"social links on {value.get('final_url')}")] + list(website_page_facts(value, str(profile.get("legal_form") or "")))
+            if proven:
+                for field, derived_value, span in derived:
+                    add("website", field, derived_value, span, confidence)
+            else:
+                for field in ("social_links", "careers_page", "news_page", "contact_page", "contact_email"):
+                    claims.append(_claim(field, None, "ambiguous", [], None))
+                errors.append({"field": "website_facts", "availability": "ambiguous", "note": "The website is not proven to be this company's own (it may be a parent group's site), so its social profiles, news, careers and contact facts are withheld."})
         else:
             claims.append(_claim("official_website", None, availability, [], None))
             if note and availability in ("failed", "blocked", "ambiguous"):

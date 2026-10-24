@@ -317,13 +317,17 @@ class ReverifyIntegrationTests(unittest.TestCase):
         envelopes, _, _, _ = run(["923609016"], site=site_wrong, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=fetch))
         self.assertEqual(envelopes[0]["modules"]["website"]["availability"], "ambiguous")
 
-    def test_already_verified_website_is_not_refetched(self):
+    def test_website_with_proven_ownership_is_not_refetched(self):
         from norway_company_agent.domain_discovery import reverify_registry_website
 
         calls = []
         fetch = lambda url: calls.append(url) or {"ok": False, "requests": 1}
-        run(["923609016"], site=site_ok, reverify=lambda p, r: reverify_registry_website(p, r, fetch_page=fetch))
+        record = site_ok("https://equinor.com/")[0]
+        record["value"]["identity_assessment"] = {"publishable": True, "ownership": "proven"}
+        upgraded, metrics = reverify_registry_website({"organisation_number": "923609016", "name": "EQUINOR ASA"}, record, fetch_page=fetch)
         self.assertEqual(calls, [])
+        self.assertEqual(metrics["requests"], 0)
+        self.assertIs(upgraded, record)
 
     def test_reverify_failure_cannot_break_or_downgrade(self):
         def boom(p, r):
