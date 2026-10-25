@@ -41,7 +41,8 @@ PARKED_MARKERS = ("domain is for sale", "domain for sale", "hugedomains", "parke
 METHOD = "domain_guess_exact_org_number_v1"
 SEARCH_METHOD = "search_candidate_exact_org_number_v1"
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
-MAX_CANDIDATES = 4
+MAX_CANDIDATES = 8
+GENERIC_TOKENS = {"norge", "norway", "gruppen", "group", "holding", "invest", "eiendom", "service", "services", "consulting", "norden"}
 MAX_EXTRA_PAGES = 2
 
 
@@ -62,8 +63,12 @@ def candidate_hosts(name: str) -> list[str]:
     if not tokens:
         return []
     joined = "".join(tokens)
+    brand = [t for t in tokens if t not in GENERIC_TOKENS] or tokens
+    options = [joined, "-".join(tokens), "".join(tokens[:2]), "".join(brand), "-".join(brand)]
+    if len(tokens[0]) >= 5 and tokens[0] not in GENERIC_TOKENS:
+        options.append(tokens[0])
     slugs: list[str] = []
-    for slug in (joined, "-".join(tokens), "".join(tokens[:2])):
+    for slug in options:
         if 4 <= len(slug) <= 40 and slug not in slugs:
             slugs.append(slug)
     hosts: list[str] = []

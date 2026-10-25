@@ -30,7 +30,7 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(name_tokens("Bjørn & Åse Elektro AS"), ["bjorn", "ase", "elektro"])
         hosts = candidate_hosts("NORSK KAFFE AS")
         self.assertEqual(hosts[0], "norskkaffe.no")
-        self.assertLessEqual(len(hosts), 4)
+        self.assertLessEqual(len(hosts), 8)
 
     def test_no_usable_name_gives_no_candidates(self):
         self.assertEqual(candidate_hosts("AS"), [])
