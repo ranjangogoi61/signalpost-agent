@@ -75,6 +75,12 @@ def normalize_financials(body: Any) -> dict[str, Any]:
     records = body if isinstance(body, list) else []
     if not records:
         return {"records": []}
+    def newest_first(item: Any) -> tuple[str, int]:
+        period = item.get("regnskapsperiode") if isinstance(item, dict) else None
+        end = str((period or {}).get("tilDato") or "")
+        return (end, 1 if str(item.get("regnskapstype") or "").upper() == "SELSKAP" else 0)
+
+    records = sorted((r for r in records if isinstance(r, dict)), key=newest_first, reverse=True)
     normalized = []
     for item in records[:3]:
         normalized.append({

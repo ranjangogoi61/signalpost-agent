@@ -100,3 +100,32 @@ class AssessmentTests(unittest.TestCase):
         (text, fields), = assessment(claims)
         self.assertIn("registry and accounts data only", text)
         self.assertEqual(fields, [])
+
+
+class AccountsFreshnessTests(unittest.TestCase):
+    def test_newest_period_first_and_stale_figures_flagged(self):
+        from norway_company_agent.official import normalize_financials
+        from norway_company_agent.synthesis import summarize_envelope
+
+        body = [
+            {"regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2022-01-01", "tilDato": "2022-12-31"}, "resultatregnskapResultat": {"aarsresultat": 1}},
+            {"regnskapstype": "SELSKAP", "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"}, "resultatregnskapResultat": {"aarsresultat": -2}},
+        ]
+        records = normalize_financials(body)["records"]
+        self.assertEqual(records[0]["period"]["tilDato"], "2023-12-31")
+        claim = lambda f, v: {"field": f, "value": v, "availability": "available", "evidence_ids": ["ev-1"], "confidence": 1.0}
+        env = {"claims": [claim("financials_latest", records[0]), claim("annual_account_years", ["2023", "2024", "2025"])], "evidence": [{"id": "ev-1"}]}
+        text = " ".join(s["text"] for s in summarize_envelope(env)["sentences"])
+        self.assertIn("not from the newest filing", text)
+        self.assertIn("show a loss", text)
+        env["claims"][1] = claim("annual_account_years", ["2022", "2023"])
+        self.assertNotIn("newest filing", " ".join(s["text"] for s in summarize_envelope(env)["sentences"]))
+
+    def test_routine_accounts_update_is_not_called_activity(self):
+        from norway_company_agent.synthesis import assessment
+
+        claim = lambda v: {"field": "recent_registry_changes", "value": v, "availability": "available", "evidence_ids": ["ev-1"]}
+        routine = assessment({"recent_registry_changes": claim({"changed_fields": ["annual accounts filed"]}), "official_website": {"availability": "not_available", "value": None}})
+        self.assertIn("registry and accounts data only", routine[-1][0])
+        real = assessment({"recent_registry_changes": claim({"changed_fields": ["business address"]})})
+        self.assertIn("beyond routine accounts filing", real[-1][0])

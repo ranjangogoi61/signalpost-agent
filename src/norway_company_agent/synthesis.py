@@ -150,7 +150,11 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
                 bits.append(f"{label} {money}")
         span = f" for {period.get('fraDato')} to {period.get('tilDato')}" if period.get("fraDato") and period.get("tilDato") else ""
         if bits:
-            add(f"Its latest filed annual accounts{span} report " + ", ".join(bits) + ".", ["financials_latest"])
+            add(f"Its latest annual accounts with figures in Regnskapsregisteret{span} report " + ", ".join(bits) + ".", ["financials_latest"])
+            years = claims.get("annual_account_years")
+            end = str(period.get("tilDato") or "")[:4]
+            if _have(years) and end.isdigit() and any(str(y).isdigit() and str(y) > end for y in years["value"]):
+                add("Account copies are on file for later years, but Regnskapsregisteret's open API did not return figures for them, so the figures above are not from the newest filing.", ["financials_latest", "annual_account_years"])
 
     years = claims.get("annual_account_years")
     if _have(years):
@@ -265,8 +269,10 @@ def assessment(claims: dict[str, dict[str, Any]]) -> list[tuple[str, list[str]]]
     if _have(claims.get("official_website")):
         signals.append("runs a website verified as its own")
         used.append("official_website")
-    if _have(claims.get("recent_registry_changes")):
-        signals.append("has recent register updates")
+    updates = claims.get("recent_registry_changes")
+    routine = {"annual accounts filed"}
+    if _have(updates) and isinstance(updates["value"], dict) and set(updates["value"].get("changed_fields") or []) - routine:
+        signals.append("has had register changes beyond routine accounts filing in the past year")
         used.append("recent_registry_changes")
     if signals:
         out.append(("Assessment: it shows public activity: it " + " and ".join(signals) + ".", used))
