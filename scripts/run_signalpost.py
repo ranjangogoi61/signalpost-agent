@@ -19,7 +19,7 @@ from norway_company_agent.nav_jobs import NavJobsIndex  # noqa: E402
 from norway_company_agent.viewer import build_viewer  # noqa: E402
 from norway_company_agent.signalpost_run import AVAILABILITY_STATES, Budget, _failed_row_envelope, read_rows, run_batch, validate  # noqa: E402
 
-DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,website,jobs"
+DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,updates,website,jobs"
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:

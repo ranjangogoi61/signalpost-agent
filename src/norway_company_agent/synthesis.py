@@ -42,6 +42,7 @@ FIELD_LABELS = {
     "registered_in_business_register": "Foretaksregisteret registration",
     "last_submitted_annual_accounts": "last submitted annual accounts",
     "vat_registered_on": "VAT registration date",
+    "recent_registry_changes": "recent register updates",
 }
 STATE_WORDS = {
     "not_available": "not found",
@@ -200,6 +201,12 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     if _have(claims.get("last_submitted_annual_accounts")):
         add(f"The most recent annual accounts it submitted to the register are for {claims['last_submitted_annual_accounts']['value']}.", ["last_submitted_annual_accounts"])
 
+    updates = claims.get("recent_registry_changes")
+    if _have(updates) and isinstance(updates["value"], dict):
+        u = updates["value"]
+        changed = ", ".join(u.get("changed_fields") or []) or "unspecified fields"
+        add(f"Since {u.get('since')} the register has published {u.get('update_count')} update(s) for it, the latest on {u.get('latest_update')} ({u.get('latest_type')}; changed: {changed}).", ["recent_registry_changes"])
+
     for text, fields in assessment(claims):
         add(text, fields)
 
@@ -258,6 +265,9 @@ def assessment(claims: dict[str, dict[str, Any]]) -> list[tuple[str, list[str]]]
     if _have(claims.get("official_website")):
         signals.append("runs a website verified as its own")
         used.append("official_website")
+    if _have(claims.get("recent_registry_changes")):
+        signals.append("has recent register updates")
+        used.append("recent_registry_changes")
     if signals:
         out.append(("Assessment: it shows public activity: it " + " and ".join(signals) + ".", used))
     elif claims.get("official_website") is not None or claims.get("job_postings") is not None:

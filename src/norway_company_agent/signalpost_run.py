@@ -39,6 +39,7 @@ from .official import (
 )
 from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
+from .registry_updates import fetch_registry_updates
 from .nav_jobs import NavJobsIndex, jobs_record
 from .synthesis import check_synthesis, summarize_envelope
 from .sampling import normalize_row
@@ -584,6 +585,9 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
     if "locations" in set(modules):
         locations = ((profile.get("evidence", {}).get("locations") or {}).get("value") or {}).get("locations") or []
         add("locations", "registered_locations", locations[:100], f"org={org} underenheter={len(locations)}")
+    if "updates" in set(modules):
+        value = (profile.get("evidence", {}).get("updates") or {}).get("value") or None
+        add("updates", "recent_registry_changes", value, f"org={org} register updates since {(value or {}).get('since')}: {(value or {}).get('update_count')} (latest {(value or {}).get('latest_update')})")
     if "jobs" in set(modules):
         value = (profile.get("evidence", {}).get("jobs") or {}).get("value") or {}
         add("jobs", "job_postings", {"active_count": value.get("active_count"), "postings": value.get("postings")} if value.get("postings") else None, f"org={org} NAV job feed: {value.get('active_count')} active ad(s) with this organisation number")
@@ -673,6 +677,20 @@ def run_batch(
         except Exception as exc:
             jobs_feed = {"scanned": False, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
         operations["requests_by_phase"]["jobs_scan"] += budget.requests - before
+
+    if "updates" in module_set:
+        anchored = [org for org in valid_orgs if profiles[org].get("anchor") != "none"]
+        try:
+            update_records, update_metrics = fetch_registry_updates(anchored, fetcher=fetcher)
+        except Exception as exc:  # defensive: the update feed can never abort the batch
+            update_records, update_metrics = {org: evidence("updates", "source_error", "official_registry_update_feed", "https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter", note=f"{type(exc).__name__}: {str(exc)[:160]}") for org in anchored}, {"requests": 0}
+        for org in valid_orgs:
+            if org not in update_records and org in profiles:
+                update_records[org] = evidence("updates", "not_found", "official_registry_update_feed", "https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter", note="Organisation number not found in the register, so it has no register updates.")
+        for org, record in update_records.items():
+            record["field"] = "updates"
+            profiles[org]["evidence"]["updates"] = record
+        operations["requests_by_phase"]["updates"] += int(update_metrics.get("requests") or 0)
 
     def jobs_phase(profile: dict[str, Any]) -> None:
         if "jobs" not in module_set or profile.get("anchor") == "none":

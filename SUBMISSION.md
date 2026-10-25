@@ -37,7 +37,7 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 
 ## What it publishes
 
-Facts only from an official register (identity, legal status, business address, registered business activity and purpose, a corporate contact email (never free-mail or sole-proprietorship addresses, never phone numbers), founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, active job ads from NAV's open feed, role holders, subunits) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
+Facts only from an official register (identity, legal status, business address, registered business activity and purpose, a corporate contact email (never free-mail or sole-proprietorship addresses, never phone numbers), founding and registration dates, VAT registration, sector, industries, annual accounts and the years of filed account copies, active job ads from NAV's open feed, role holders, subunits, parent unit, Foretaksregisteret registration, last submitted accounts year, VAT registration date, and recent register updates from the open update feed with the names of changed fields only) or from a company page that prints the company's exact organisation number. Every published claim carries a source URL, retrieval time and content SHA-256. Anything not found, blocked, not applicable, ambiguous or failed is returned as that state with no value. One envelope per input row, in input order, even for invalid, duplicate, unknown or deleted numbers.
 
 Role holders are published by name and role only; dates of birth are discarded.
 
@@ -59,7 +59,7 @@ CI runs on every push to `dev`: unit tests (no network allowed), a live 100-comp
 
 ## Synthesis and UX
 
-Each envelope has a deterministic, source-cited `synthesis`, and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.
+Each envelope has a deterministic, source-cited `synthesis` (facts plus a plain-language assessment such as profit or loss, negative equity, winding-down flags and public activity, which never states a number that is not in a cited claim), and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare (with a source link on every compared value and a "show only differences" filter) and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.
 
 ## Smoke result and report
 
