@@ -38,6 +38,10 @@ FIELD_LABELS = {
     "news_page": "news page",
     "contact_page": "contact page",
     "contact_email": "contact email",
+    "parent_unit": "parent unit",
+    "registered_in_business_register": "Foretaksregisteret registration",
+    "last_submitted_annual_accounts": "last submitted annual accounts",
+    "vat_registered_on": "VAT registration date",
 }
 STATE_WORDS = {
     "not_available": "not found",
@@ -179,6 +183,26 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     if _have(claims.get("contact_email")):
         add(f"Its website prints the contact email {claims['contact_email']['value']}.", ["contact_email"])
 
+    register_bits = []
+    used = []
+    reg = claims.get("registered_in_business_register")
+    if reg and reg.get("availability") == "available" and reg.get("value") is not None:
+        register_bits.append("is registered in Foretaksregisteret (the Register of Business Enterprises)" if reg["value"] else "is not registered in Foretaksregisteret")
+        used.append("registered_in_business_register")
+    if _have(claims.get("vat_registered_on")):
+        register_bits.append(f"entered the VAT register on {claims['vat_registered_on']['value']}")
+        used.append("vat_registered_on")
+    if _have(claims.get("parent_unit")):
+        register_bits.append(f"is a subunit of organisation number {claims['parent_unit']['value']}")
+        used.append("parent_unit")
+    if register_bits:
+        add("It " + ", ".join(register_bits[:-1]) + (" and " if len(register_bits) > 1 else "") + register_bits[-1] + ".", used)
+    if _have(claims.get("last_submitted_annual_accounts")):
+        add(f"The most recent annual accounts it submitted to the register are for {claims['last_submitted_annual_accounts']['value']}.", ["last_submitted_annual_accounts"])
+
+    for text, fields in assessment(claims):
+        add(text, fields)
+
     refresh = envelope.get("refresh") or {}
     changes = envelope.get("changes") or []
     if refresh.get("compared_with_previous"):
@@ -199,7 +223,46 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         listing = "; ".join(f"{u['label']} ({u['meaning']})" for u in unknown)
         sentences.append({"text": f"Not published: {listing}.", "fields": [u["field"] for u in unknown], "evidence_ids": []})
 
-    return {"method": "deterministic_template_v1", "sentences": sentences, "unknown": unknown}
+    return {"method": "deterministic_template_v2", "sentences": sentences, "unknown": unknown}
+
+
+def assessment(claims: dict[str, dict[str, Any]]) -> list[tuple[str, list[str]]]:
+    """Plain-language reading of the published facts. Qualitative only: it never states a number that is not in a cited claim."""
+    out: list[tuple[str, list[str]]] = []
+    fin = claims.get("financials_latest")
+    record = fin["value"] if _have(fin) and isinstance(fin["value"], dict) else {}
+    result = record.get("annual_result")
+    revenue = record.get("revenue")
+    equity = record.get("equity")
+    numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    if numeric(result):
+        if result > 0:
+            text = "Assessment: the latest filed accounts show a profit"
+        elif result < 0:
+            text = "Assessment: the latest filed accounts show a loss"
+        else:
+            text = "Assessment: the latest filed accounts show a break-even result"
+        if numeric(revenue) and revenue == 0:
+            text += " with no reported revenue, which often indicates a holding or dormant company"
+        if numeric(equity) and equity < 0:
+            text += ", and equity is negative, a financial-risk signal"
+        out.append((text + ".", ["financials_latest"]))
+    status = claims.get("legal_status")
+    if _have(status) and status["value"] != "active":
+        out.append(("Assessment: the register flags this entity as " + str(status["value"]).replace("_", " ") + ", so treat it as winding down rather than trading normally.", ["legal_status"]))
+    signals = []
+    used = []
+    if _have(claims.get("job_postings")):
+        signals.append("is currently hiring")
+        used.append("job_postings")
+    if _have(claims.get("official_website")):
+        signals.append("runs a website verified as its own")
+        used.append("official_website")
+    if signals:
+        out.append(("Assessment: it shows public activity: it " + " and ".join(signals) + ".", used))
+    elif claims.get("official_website") is not None or claims.get("job_postings") is not None:
+        out.append(("Assessment: no verified website or active job ad was found, so this profile rests on official registry and accounts data only.", []))
+    return out
 
 
 def _numbers(value: Any, out: set[str] | None = None) -> set[str]:

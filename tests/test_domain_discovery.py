@@ -112,3 +112,32 @@ class DiscoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegistryEmailDomainTests(unittest.TestCase):
+    def _profile(self, email):
+        return {**PROFILE, "name": "BRAGE TRE OG BYGG AS", "evidence": {"registry": {"status": "available", "value": {"epostadresse": email}}}}
+
+    def test_email_domain_is_tried_first_and_still_needs_org_number(self):
+        from norway_company_agent.domain_discovery import registry_email_host
+
+        profile = self._profile("Post@BrageBygg.no")
+        self.assertEqual(registry_email_host(profile), "bragebygg.no")
+        seen = []
+
+        def fetch(url):
+            seen.append(url)
+            return page("<html><footer>Org.nr 914 778 271</footer></html>", url=url)
+
+        record, _ = discover_website(profile, resolver=lambda h: True, fetch_page=fetch, site_fetcher=site)
+        self.assertTrue(seen[0].startswith("https://bragebygg.no/"))
+        self.assertEqual(record["value"]["identity_assessment"]["method"], "registry_email_domain_exact_org_number_v1")
+        record, _ = discover_website(profile, resolver=lambda h: True, fetch_page=lambda u: page("<p>Brage</p>", url=u), site_fetcher=site)
+        self.assertNotEqual(record["status"], "available")
+
+    def test_free_mail_domains_are_not_candidates(self):
+        from norway_company_agent.domain_discovery import registry_email_host
+
+        self.assertIsNone(registry_email_host(self._profile("brage@gmail.com")))
+        self.assertIsNone(registry_email_host(self._profile("not-an-email")))
+        self.assertIsNone(registry_email_host(PROFILE))

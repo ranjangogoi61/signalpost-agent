@@ -75,3 +75,28 @@ class SynthesisTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AssessmentTests(unittest.TestCase):
+    def _claim(self, field, value):
+        return {"field": field, "value": value, "availability": "available", "evidence_ids": ["ev-1"], "confidence": 1.0}
+
+    def test_profit_loss_and_negative_equity_are_read_without_new_numbers(self):
+        from norway_company_agent.synthesis import assessment
+
+        loss = {"financials_latest": self._claim("financials_latest", {"annual_result": -5000, "revenue": 0, "equity": -100})}
+        text = assessment(loss)[0][0]
+        self.assertIn("loss", text)
+        self.assertIn("holding or dormant", text)
+        self.assertIn("equity is negative", text)
+        self.assertFalse(any(ch.isdigit() for ch in text))
+        profit = assessment({"financials_latest": self._claim("financials_latest", {"annual_result": 10, "revenue": 50})})[0][0]
+        self.assertIn("profit", profit)
+
+    def test_footprint_absence_cites_nothing(self):
+        from norway_company_agent.synthesis import assessment
+
+        claims = {"official_website": {"field": "official_website", "value": None, "availability": "not_available", "evidence_ids": []}}
+        (text, fields), = assessment(claims)
+        self.assertIn("registry and accounts data only", text)
+        self.assertEqual(fields, [])

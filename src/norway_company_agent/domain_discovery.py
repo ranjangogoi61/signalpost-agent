@@ -40,6 +40,7 @@ LEGAL_SUFFIXES = {"as", "asa", "ans", "da", "enk", "iks", "sa", "nuf", "ab", "lt
 PARKED_MARKERS = ("domain is for sale", "domain for sale", "hugedomains", "parked at", "this domain may be for sale", "domenet er til salgs")
 METHOD = "domain_guess_exact_org_number_v1"
 SEARCH_METHOD = "search_candidate_exact_org_number_v1"
+EMAIL_METHOD = "registry_email_domain_exact_org_number_v1"
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 MAX_CANDIDATES = 8
 GENERIC_TOKENS = {"norge", "norway", "gruppen", "group", "holding", "invest", "eiendom", "service", "services", "consulting", "norden"}
@@ -78,6 +79,29 @@ def candidate_hosts(name: str) -> list[str]:
             if host not in hosts and not any(host == b or host.endswith("." + b) for b in BLOCKED_DISCOVERY_HOSTS):
                 hosts.append(host)
     return hosts[:MAX_CANDIDATES]
+
+
+REGISTRY_FREE_MAIL = {"gmail.com", "googlemail.com", "hotmail.com", "hotmail.no", "outlook.com", "outlook.no", "live.com", "live.no", "yahoo.com", "yahoo.no", "icloud.com", "me.com", "online.no", "msn.com", "proton.me", "protonmail.com", "start.no", "frisurf.no", "broadpark.no", "getmail.no", "c2i.net", "lyse.net", "altibox.no", "telia.com", "mac.com"}
+
+
+def registry_email_host(profile: dict[str, Any]) -> str | None:
+    """The domain of the e-mail address the company itself registered in Enhetsregisteret (a strong website candidate)."""
+    records = profile.get("evidence") or {}
+    for module in ("registry_live", "registry"):
+        raw = (records.get(module) or {}).get("value")
+        if not isinstance(raw, dict):
+            continue
+        email = next((str(v) for k, v in raw.items() if str(k).casefold() == "epostadresse" and v), "")
+        email = email.strip().casefold()
+        if "@" not in email:
+            continue
+        host = email.rsplit("@", 1)[1].strip(". ")
+        if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host) or host in REGISTRY_FREE_MAIL:
+            return None
+        if any(host == b or host.endswith("." + b) for b in BLOCKED_DISCOVERY_HOSTS):
+            return None
+        return host.removeprefix("www.")
+    return None
 
 
 def org_number_pattern(org: str) -> re.Pattern[str]:
@@ -298,7 +322,9 @@ def discover_website(
             searched = list(searcher(profile))
         except Exception:
             searched = []
-    hosts = list(dict.fromkeys(searched + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 3]
+    email_host = registry_email_host(profile)
+    leading = ([email_host] if email_host else []) + searched
+    hosts = list(dict.fromkeys(leading + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 4]
     tried: list[dict[str, Any]] = []
     verified: dict[str, Any] | None = None
     for host in hosts:
@@ -312,7 +338,7 @@ def discover_website(
         metrics["requests"] += result["stats"]["requests"]
         metrics["bytes"] += result["stats"]["bytes"]
         metrics["latencies_ms"].extend(result["stats"]["latencies_ms"])
-        tried.append({"host": host, "origin": "search" if host in searched else "name", "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
+        tried.append({"host": host, "origin": "registry_email" if host == email_host else ("search" if host in searched else "name"), "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
         if result["verified"]:
             verified = result
             break
@@ -328,7 +354,7 @@ def discover_website(
     if record.get("status") != "available":
         record["note"] = f"{record.get('note') or ''} Exact organisation number was printed on {verified['page_url']} but the full crawl failed.".strip()
         return record, metrics
-    method = SEARCH_METHOD if verified["host"] in searched else METHOD
+    method = EMAIL_METHOD if verified["host"] == email_host else (SEARCH_METHOD if verified["host"] in searched else METHOD)
     gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=method, others=int(verified.get("others") or 0))
     gated["value"]["discovery"] = {"method": method, "candidates": tried, "verified_on": verified["page_url"]}
     gated["source_type"] = "company_website_discovered_by_exact_org_number"
