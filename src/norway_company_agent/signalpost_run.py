@@ -488,6 +488,18 @@ def registry_extra_facts(row: dict[str, Any], legal_form: str = "") -> list[tupl
     email = str(_pick(row, "epostadresse") or "").strip().casefold()
     if email and "@" in email and legal_form.upper() != "ENK" and email.rsplit("@", 1)[1] not in FREE_MAIL:
         facts.append(("registry_contact_email", email, f"epostadresse={email}"))
+    parent = re.sub(r"\D", "", str(_pick(row, "overordnetEnhet") or ""))
+    if len(parent) == 9:
+        facts.append(("parent_unit", parent, f"overordnetEnhet={parent}"))
+    in_business_register = _pick(row, "registrertIForetaksregisteret")
+    if isinstance(in_business_register, bool) or str(in_business_register).lower() in {"true", "false"}:
+        facts.append(("registered_in_business_register", str(in_business_register).lower() == "true", f"registrertIForetaksregisteret={in_business_register}"))
+    last_accounts = _pick(row, "sisteInnsendteAarsregnskap")
+    if last_accounts and re.fullmatch(r"\d{4}", str(last_accounts).strip()):
+        facts.append(("last_submitted_annual_accounts", str(last_accounts).strip(), f"sisteInnsendteAarsregnskap={last_accounts}"))
+    vat_date = _pick(row, "registreringsdatoMerverdiavgiftsregisteret")
+    if vat_date and re.match(r"\d{4}-\d{2}-\d{2}", str(vat_date)):
+        facts.append(("vat_registered_on", str(vat_date)[:10], f"registreringsdatoMerverdiavgiftsregisteret={vat_date}"))
     sector = _pick(row, "institusjonellSektorkode.beskrivelse")
     if sector:
         facts.append(("sector", str(sector), f"institusjonellSektorkode={sector}"))

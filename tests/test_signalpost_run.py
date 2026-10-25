@@ -340,3 +340,17 @@ class ReverifyIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegistryMoreFactsTests(unittest.TestCase):
+    def test_extra_official_fields_without_phone_numbers(self):
+        from norway_company_agent.signalpost_run import registry_extra_facts
+
+        row = {"overordnetEnhet": "914778271", "registrertIForetaksregisteret": "true", "sisteInnsendteAarsregnskap": "2024", "registreringsdatoMerverdiavgiftsregisteret": "2010-05-01"}
+        facts = {f: v for f, v, _ in registry_extra_facts(row, "AS")}
+        self.assertEqual(facts["parent_unit"], "914778271")
+        self.assertIs(facts["registered_in_business_register"], True)
+        self.assertEqual(facts["last_submitted_annual_accounts"], "2024")
+        self.assertEqual(facts["vat_registered_on"], "2010-05-01")
+        self.assertNotIn("registry_phone", facts)
+        self.assertNotIn("parent_unit", {f for f, _, _ in registry_extra_facts({"overordnetEnhet": "12"}, "AS")})
