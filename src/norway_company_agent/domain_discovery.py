@@ -41,6 +41,8 @@ PARKED_MARKERS = ("domain is for sale", "domain for sale", "hugedomains", "parke
 METHOD = "domain_guess_exact_org_number_v1"
 SEARCH_METHOD = "search_candidate_exact_org_number_v1"
 EMAIL_METHOD = "registry_email_domain_exact_org_number_v1"
+WIKIDATA_METHOD = "wikidata_candidate_exact_org_number_v1"
+SUBUNIT_METHOD = "subunit_registry_candidate_exact_org_number_v1"
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 MAX_CANDIDATES = 8
 GENERIC_TOKENS = {"norge", "norway", "gruppen", "group", "holding", "invest", "eiendom", "service", "services", "consulting", "norden"}
@@ -102,6 +104,34 @@ def registry_email_host(profile: dict[str, Any]) -> str | None:
             return None
         return host.removeprefix("www.")
     return None
+
+
+def _clean_host(value: str) -> str | None:
+    text = str(value or "").strip().casefold()
+    if not text:
+        return None
+    if "@" in text:
+        text = text.rsplit("@", 1)[1]
+    if "://" not in text:
+        text = "https://" + text
+    host = (urllib.parse.urlparse(text).hostname or "").strip(". ").removeprefix("www.")
+    if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host) or host in REGISTRY_FREE_MAIL:
+        return None
+    if any(host == b or host.endswith("." + b) for b in BLOCKED_DISCOVERY_HOSTS):
+        return None
+    return host
+
+
+def subunit_hosts(profile: dict[str, Any], limit: int = 2) -> list[str]:
+    """Websites and e-mail domains the company's own subunits registered in Enhetsregisteret."""
+    locations = (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []
+    hosts: list[str] = []
+    for item in locations if isinstance(locations, list) else []:
+        for raw in ((item or {}).get("website"), (item or {}).get("email_domain")):
+            host = _clean_host(raw or "")
+            if host and host not in hosts:
+                hosts.append(host)
+    return hosts[:limit]
 
 
 def org_number_pattern(org: str) -> re.Pattern[str]:
@@ -323,8 +353,10 @@ def discover_website(
         except Exception:
             searched = []
     email_host = registry_email_host(profile)
-    leading = ([email_host] if email_host else []) + searched
-    hosts = list(dict.fromkeys(leading + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 4]
+    wikidata = [h for h in (_clean_host(x) for x in profile.get("wikidata_websites") or []) if h][:2]
+    subunits = subunit_hosts(profile)
+    leading = ([email_host] if email_host else []) + wikidata + subunits + searched
+    hosts = list(dict.fromkeys(leading + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 6]
     tried: list[dict[str, Any]] = []
     verified: dict[str, Any] | None = None
     for host in hosts:
@@ -338,7 +370,7 @@ def discover_website(
         metrics["requests"] += result["stats"]["requests"]
         metrics["bytes"] += result["stats"]["bytes"]
         metrics["latencies_ms"].extend(result["stats"]["latencies_ms"])
-        tried.append({"host": host, "origin": "registry_email" if host == email_host else ("search" if host in searched else "name"), "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
+        tried.append({"host": host, "origin": "registry_email" if host == email_host else ("wikidata" if host in wikidata else ("subunit_registry" if host in subunits else ("search" if host in searched else "name"))), "result": "verified" if result["verified"] else (result["error"] or "organisation number not printed on homepage or contact pages")})
         if result["verified"]:
             verified = result
             break
@@ -354,7 +386,8 @@ def discover_website(
     if record.get("status") != "available":
         record["note"] = f"{record.get('note') or ''} Exact organisation number was printed on {verified['page_url']} but the full crawl failed.".strip()
         return record, metrics
-    method = EMAIL_METHOD if verified["host"] == email_host else (SEARCH_METHOD if verified["host"] in searched else METHOD)
+    host = verified["host"]
+    method = EMAIL_METHOD if host == email_host else (WIKIDATA_METHOD if host in wikidata else (SUBUNIT_METHOD if host in subunits else (SEARCH_METHOD if host in searched else METHOD)))
     gated = mark_verified_by_org_number(profile, record, verified["page_url"], method=method, others=int(verified.get("others") or 0))
     gated["value"]["discovery"] = {"method": method, "candidates": tried, "verified_on": verified["page_url"]}
     gated["source_type"] = "company_website_discovered_by_exact_org_number"

@@ -156,6 +156,8 @@ def normalize_locations(body: Any) -> dict[str, Any]:
         "address": item.get("beliggenhetsadresse") or item.get("postadresse"),
         "industry": item.get("naeringskode1"),
         "employees": item.get("antallAnsatte"),
+        "website": item.get("hjemmeside") or None,
+        "email_domain": (str(item.get("epostadresse") or "").rsplit("@", 1)[1].strip().casefold() if "@" in str(item.get("epostadresse") or "") else None),
     } for item in rows]}
 
 

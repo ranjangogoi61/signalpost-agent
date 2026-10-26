@@ -40,6 +40,7 @@ from .official import (
 from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
 from .registry_updates import fetch_registry_updates
+from .wikidata import wikidata_websites
 from .nav_jobs import NavJobsIndex, jobs_record
 from .synthesis import check_synthesis, summarize_envelope
 from .sampling import normalize_row
@@ -661,6 +662,7 @@ def run_batch(
     discovery_soft_limit: float = 0.7,
     reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = reverify_registry_website,
     jobs_index: NavJobsIndex | None = None,
+    wikidata_fetcher: Callable[..., tuple[dict[str, list[str]], dict[str, Any]]] | None = wikidata_websites,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     started_at = utc_now()
     t0 = time.monotonic()
@@ -721,6 +723,17 @@ def run_batch(
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         list(pool.map(phase_one, valid_orgs))
+        if "website" in module_set and discovery_fetcher is not None and wikidata_fetcher is not None:
+            needing = [org for org in valid_orgs if profiles[org].get("anchor") != "none" and not profiles[org].get("website")]
+            if needing and budget.fraction_used() < discovery_soft_limit:
+                try:
+                    sites, wd_metrics = wikidata_fetcher(needing, fetcher=fetcher)
+                except Exception:
+                    sites, wd_metrics = {}, {"requests": 0}
+                for org, urls in sites.items():
+                    if org in profiles:
+                        profiles[org]["wikidata_websites"] = urls
+                operations["requests_by_phase"]["wikidata"] += int(wd_metrics.get("requests") or 0)
         list(pool.map(phase_two, valid_orgs))
 
     completed_at = utc_now()
