@@ -13,6 +13,7 @@ Guarantees (each covered by tests/test_signalpost_run.py):
 from __future__ import annotations
 
 import csv
+import functools
 import gzip
 import hashlib
 import json
@@ -659,7 +660,7 @@ def run_batch(
     fetcher: Callable[[str], FetchResult] = fetch_json,
     site_fetcher: Callable[..., tuple[dict, dict]] = fetch_website,
     discovery_fetcher: Callable[[dict[str, Any]], tuple[dict, dict]] | None = discover_website,
-    discovery_soft_limit: float = 0.7,
+    discovery_soft_limit: float = 0.8,
     reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = reverify_registry_website,
     jobs_index: NavJobsIndex | None = None,
     wikidata_fetcher: Callable[..., tuple[dict[str, list[str]], dict[str, Any]]] | None = wikidata_websites,
@@ -716,7 +717,7 @@ def run_batch(
         profile = profiles[org]
         if "website" not in module_set or profile.get("anchor") == "none":
             return
-        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher, discovery_fetcher, discovery_soft_limit, reverifier)
+        metric = _website_phase(profile, budget, website_soft_limit, site_fetcher, discovery_for_run, discovery_soft_limit, reverifier)
         operations["requests_by_phase"]["discovery" if metric.get("discovery") else "website"] += metric["requests"]
         operations["bytes"] += metric["bytes"]
         operations["latencies_ms"].extend(metric["latencies_ms"])
@@ -734,7 +735,16 @@ def run_batch(
                     if org in profiles:
                         profiles[org]["wikidata_websites"] = urls
                 operations["requests_by_phase"]["wikidata"] += int(wd_metrics.get("requests") or 0)
-        list(pool.map(phase_two, valid_orgs))
+        # Registry-linked websites first (cheap and high value), then discovery with a fair per-company request share.
+        with_site = [org for org in valid_orgs if profiles[org].get("website")]
+        without_site = [org for org in valid_orgs if not profiles[org].get("website")]
+        discovery_for_run = discovery_fetcher
+        if discovery_fetcher is discover_website and without_site:
+            reserve = discovery_soft_limit * budget.max_requests - budget.requests - 8 * len(with_site)
+            cap = max(4, min(14, int(reserve / len(without_site))))
+            discovery_for_run = functools.partial(discover_website, max_requests=cap)
+            operations["discovery_cap_per_company"] = cap
+        list(pool.map(phase_two, with_site + without_site))
 
     completed_at = utc_now()
     runtime_ms = int((time.monotonic() - t0) * 1000)
@@ -781,6 +791,7 @@ def run_batch(
             "requests": budget.requests,
             "requests_by_phase": dict(operations["requests_by_phase"]),
             "requests_refused_by_budget": budget.refused,
+            "discovery_cap_per_company": operations.get("discovery_cap_per_company"),
             "bytes": operations["bytes"],
             "runtime_ms": runtime_ms,
             "p50_ms": latencies[len(latencies) // 2] if latencies else None,

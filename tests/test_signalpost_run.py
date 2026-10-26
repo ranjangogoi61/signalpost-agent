@@ -237,7 +237,7 @@ class DiscoveryIntegrationTests(unittest.TestCase):
 
     def test_discovery_is_skipped_when_budget_is_tight(self):
         budget = Budget(100, 10_000)
-        budget.requests = 75
+        budget.requests = 82
         calls = []
         envelopes, _, _, _ = run(["914778271"], budget=budget, discovery=lambda p: calls.append(p) or self.found(p))
         self.assertEqual(calls, [])

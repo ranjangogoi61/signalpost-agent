@@ -35,6 +35,7 @@ def main() -> None:
         "claims_by_field": {k: dict(v) for k, v in sorted(by_field.items())},
         "modules": {k: dict(v) for k, v in sorted(modules.items())},
         "changes_total": sum(len(e.get("changes", [])) for e in envelopes),
+        "changes_by_field": dict(Counter(str(c.get("field")) for e in envelopes for c in e.get("changes", []))),
     }
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
