@@ -15,27 +15,28 @@ jobs:
           python-version: "3.12"
       - run: pip install uv
       - run: uv sync --frozen
-      - name: Select 1,000-company batch
+      - name: Select batch and run 1,000 companies with the submitted command
         run: |
-          curl -fsSL https://builderr.ai/signalpost-company-universe-2025.jsonl.gz -o universe.jsonl.gz
-          uv run python select_entry_batch.py --universe universe.jsonl.gz --count 1000 --output scale-companies.jsonl
-          wc -l scale-companies.jsonl
-      - name: Live 1,000-company run with the submitted command
-        run: |
-          /usr/bin/time -v uv run python scripts/run_signalpost.py \
-            --organisations scale-companies.jsonl \
-            --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
-            --report out/run-report.json --run-id ci-scale --expected-count 1000 2> out/time.txt; echo "exit=$?" >> out/time.txt
-          grep -E "Maximum resident|Elapsed|exit=" out/time.txt
-      - name: Summarize (counts only)
-        if: always()
-        run: |
-          uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/scale-summary.json > /dev/null || true
-          grep -E "Maximum resident|Elapsed|exit=" out/time.txt > out/scale-time.txt || true
+          set +e
+          mkdir -p out
+          {
+            curl -fsSL https://builderr.ai/signalpost-company-universe-2025.jsonl.gz -o universe.jsonl.gz; echo "curl=$?"
+            uv run python select_entry_batch.py --universe universe.jsonl.gz --count 1000 --output scale-companies.jsonl; echo "select=$?"
+            wc -l scale-companies.jsonl
+            START=$(date +%s)
+            uv run python scripts/run_signalpost.py --organisations scale-companies.jsonl \
+              --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
+              --report out/run-report.json --run-id ci-scale --expected-count 1000; echo "run_exit=$?"
+            echo "wall_seconds=$(( $(date +%s) - START ))"
+            wc -l out/envelopes.jsonl
+            uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/scale-summary.json > /dev/null; echo "summary=$?"
+          } > out/log.txt 2>&1
+          grep -vE "Nordmann" out/log.txt | grep -E "=|envelopes|companies|Error|Traceback|line [0-9]+" | tail -40 > out/scale-log.txt
+          cat out/scale-log.txt
       - name: Publish counts to scale-results
         if: always()
         run: |
-          mkdir -p /tmp/r && cp out/scale-summary.json out/scale-time.txt /tmp/r/ 2>/dev/null || true
+          mkdir -p /tmp/r && cp out/scale-summary.json out/scale-log.txt /tmp/r/ 2>/dev/null; ls /tmp/r
           git config user.name ci && git config user.email ci@users.noreply.github.com
-          git checkout --orphan scale-results && git rm -rqf . && rm -rf out scale-companies.jsonl universe.jsonl.gz
-          cp /tmp/r/* . && git add scale-summary.json scale-time.txt && git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
+          git checkout -q --orphan scale-results && git rm -rqf . && rm -rf out scale-companies.jsonl universe.jsonl.gz
+          cp /tmp/r/* . ; git add -A . && git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
