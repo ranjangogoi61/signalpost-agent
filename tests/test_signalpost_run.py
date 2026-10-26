@@ -219,7 +219,7 @@ class DiscoveryIntegrationTests(unittest.TestCase):
         self.assertEqual(claim["availability"], "available")
         self.assertEqual(claim["value"], "https://norskkaffe.no/")
         self.assertTrue(claim["evidence_ids"])
-        self.assertEqual(report["discovery"], {"attempted": 1, "verified": 1, "method": "domain_guess_exact_org_number_v1"})
+        self.assertEqual({k: report["discovery"][k] for k in ("attempted", "verified", "method")}, {"attempted": 1, "verified": 1, "method": "domain_guess_exact_org_number_v1"})
         self.assertEqual(report["operations"]["requests_by_phase"]["discovery"], 5)
         self.assertTrue(report["validation"]["passed"], report["validation"])
 
@@ -354,3 +354,16 @@ class RegistryMoreFactsTests(unittest.TestCase):
         self.assertEqual(facts["vat_registered_on"], "2010-05-01")
         self.assertNotIn("registry_phone", facts)
         self.assertNotIn("parent_unit", {f for f, _, _ in registry_extra_facts({"overordnetEnhet": "12"}, "AS")})
+
+
+class RefreshNoiseTests(unittest.TestCase):
+    def test_unreachable_website_is_not_a_change_but_a_real_title_change_is(self):
+        from norway_company_agent.refresh import diff_profile
+
+        def prof(status, title):
+            return {"organisation_number": "914778271", "name": "X", "evidence": {"website": {"status": status, "value": {"title": title} if title else None, "source_url": "https://x.no/"}}}
+
+        self.assertEqual(diff_profile(prof("available", "Old"), prof("source_error", None)), [])
+        self.assertEqual(diff_profile(prof("not_found", None), prof("available", "New")), [])
+        changes = diff_profile(prof("available", "Old"), prof("available", "New"))
+        self.assertEqual([c["field"] for c in changes], ["website.title"])

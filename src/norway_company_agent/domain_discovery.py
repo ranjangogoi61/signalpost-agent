@@ -263,7 +263,23 @@ def dns_resolves(host: str) -> bool:
         return False
 
 
+TRANSIENT_ERRORS = ("timed out", "TimeoutError", "URLError", "RemoteDisconnected", "ConnectionResetError", "IncompleteRead", "HTTP Error 5", "HTTP Error 429")
+
+
 def default_fetch_page(url: str, *, timeout: float = 12.0, max_bytes: int = 1_500_000) -> dict[str, Any]:
+    """Fetch one page; a transient network failure is retried once (both attempts are counted)."""
+    first = _fetch_page_once(url, timeout=timeout, max_bytes=max_bytes)
+    error = str(first.get("error") or "")
+    if first.get("ok") or not any(marker in error for marker in TRANSIENT_ERRORS) or "budget_exhausted" in error:
+        return first
+    time.sleep(1.0)
+    second = _fetch_page_once(url, timeout=timeout, max_bytes=max_bytes)
+    second["requests"] = int(second.get("requests") or 0) + int(first.get("requests") or 0)
+    second["bytes"] = int(second.get("bytes") or 0) + int(first.get("bytes") or 0)
+    return second
+
+
+def _fetch_page_once(url: str, *, timeout: float = 12.0, max_bytes: int = 1_500_000) -> dict[str, Any]:
     result: dict[str, Any] = {"ok": False, "url": url, "final_url": None, "html": "", "requests": 0, "bytes": 0, "latency_ms": 0, "error": None}
     try:
         assert_public_url(url)

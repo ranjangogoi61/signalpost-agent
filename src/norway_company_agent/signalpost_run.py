@@ -793,6 +793,13 @@ def run_batch(
             "attempted": sum(1 for p in profiles.values() if p.get("discovery")),
             "verified": sum(1 for p in profiles.values() if (p.get("discovery") or {}).get("verified")),
             "method": "domain_guess_exact_org_number_v1",
+            "verified_by_method": dict(Counter(
+                (((p.get("evidence") or {}).get("website") or {}).get("value") or {}).get("identity_assessment", {}).get("method")
+                for p in profiles.values()
+                if (((p.get("evidence") or {}).get("website") or {}).get("value") or {}).get("identity_assessment", {}).get("ownership") == "proven"
+            )),
+            "wikidata_candidates": sum(1 for p in profiles.values() if p.get("wikidata_websites")),
+            "subunit_candidates": sum(1 for p in profiles.values() if (((p.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") and any((l or {}).get("website") or (l or {}).get("email_domain") for l in ((p.get("evidence") or {}).get("locations") or {}).get("value", {}).get("locations") or [])),
         },
         "jobs_feed": jobs_feed,
         "availability_totals": {state: totals.get(state, 0) for state in AVAILABILITY_STATES},

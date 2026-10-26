@@ -49,6 +49,9 @@ def diff_profile(previous: dict[str, Any], current: dict[str, Any]) -> list[dict
             continue
         record = _evidence_for(current, field)
         previous_record = _evidence_for(previous, field)
+        if field.startswith("website.") and not (record.get("status") == "available" and previous_record.get("status") == "available"):
+            # A website that one run could not reach or re-discover is not evidence that the company changed.
+            continue
         changes.append({
             "organisation_number": new_org,
             "field": field,
