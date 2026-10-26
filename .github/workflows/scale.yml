@@ -1,0 +1,41 @@
+name: scale
+on:
+  push:
+    branches: [scale-test]
+permissions:
+  contents: write
+jobs:
+  scale-1000:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+      - run: uv sync --frozen
+      - name: Select 1,000-company batch
+        run: |
+          curl -fsSL https://builderr.ai/signalpost-company-universe-2025.jsonl.gz -o universe.jsonl.gz
+          uv run python select_entry_batch.py --universe universe.jsonl.gz --count 1000 --output scale-companies.jsonl
+          wc -l scale-companies.jsonl
+      - name: Live 1,000-company run with the submitted command
+        run: |
+          /usr/bin/time -v uv run python scripts/run_signalpost.py \
+            --organisations scale-companies.jsonl \
+            --output out/envelopes.jsonl --profiles-output out/profiles.jsonl \
+            --report out/run-report.json --run-id ci-scale --expected-count 1000 2> out/time.txt; echo "exit=$?" >> out/time.txt
+          grep -E "Maximum resident|Elapsed|exit=" out/time.txt
+      - name: Summarize (counts only)
+        if: always()
+        run: |
+          uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/scale-summary.json > /dev/null || true
+          grep -E "Maximum resident|Elapsed|exit=" out/time.txt > out/scale-time.txt || true
+      - name: Publish counts to scale-results
+        if: always()
+        run: |
+          mkdir -p /tmp/r && cp out/scale-summary.json out/scale-time.txt /tmp/r/ 2>/dev/null || true
+          git config user.name ci && git config user.email ci@users.noreply.github.com
+          git checkout --orphan scale-results && git rm -rqf . && rm -rf out scale-companies.jsonl universe.jsonl.gz
+          cp /tmp/r/* . && git add scale-summary.json scale-time.txt && git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
