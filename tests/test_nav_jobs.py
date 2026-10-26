@@ -235,3 +235,15 @@ class LegacyEntryShapeTests(unittest.TestCase):
         index.scan()
         record, _ = jobs_record(PROFILE, index)
         self.assertEqual(record["status"], "available")
+
+
+class LooseNameTests(unittest.TestCase):
+    def test_brand_variant_is_opened_but_published_only_on_exact_number(self):
+        pages = {"p1": {"next_url": None, "items": [item("v1", "Norsk Kaffe Oslo"), item("v2", "Norsk Kaffe Bergen"), item("v3", "Norsk Kaffe Trondheim"), item("w1", "Norsk Bygg AS")]}}
+        entries = {"v1": entry("v1", "914778271"), "v2": entry("v2", "444444444"), "v3": entry("v3", "914778271"), "w1": entry("w1", "914778271")}
+        index = NavJobsIndex(opener=FakeNav(pages, entries), now=lambda: NOW)
+        index.scan()
+        record, metrics = jobs_record(PROFILE, index)
+        self.assertEqual(metrics["requests"], 2)  # capped; the unrelated "Norsk Bygg" ad is never opened
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(record["value"]["active_count"], 1)

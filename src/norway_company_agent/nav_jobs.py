@@ -31,6 +31,7 @@ AD_PAGE = "https://arbeidsplassen.nav.no/stillinger/stilling/{uuid}"
 USER_AGENT = "signalpost-agent/1.0 (+https://github.com/ranjangogoi61/signalpost-agent)"
 MAX_CANDIDATES_PER_COMPANY = 4
 MAX_POSTINGS_PUBLISHED = 8
+MAX_LOOSE_PER_COMPANY = 2
 
 
 JWT_RE = re.compile(r"[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
@@ -79,6 +80,7 @@ class NavJobsIndex:
         self._deadline = deadline or (lambda: False)
         self._ads: dict[str, dict[str, Any]] = {}
         self._by_name: dict[tuple[str, ...], list[str]] = {}
+        self._by_first: dict[str, list[str]] = {}
         self._lock = threading.Lock()
         self.status: dict[str, Any] = {"scanned": False, "pages": 0, "items": 0, "active_ads": 0, "truncated": False, "error": None, "lookback_days": lookback_days}
 
@@ -132,10 +134,12 @@ class NavJobsIndex:
             with self._lock:
                 self._ads = {k: v for k, v in seen_ads.items() if v["status"] == "ACTIVE"}
                 self._by_name = {}
+                self._by_first = {}
                 for uuid, ad in self._ads.items():
                     key = tuple(name_tokens(ad["business"]))
                     if key:
                         self._by_name.setdefault(key, []).append(uuid)
+                        self._by_first.setdefault(key[0], []).append(uuid)
             self.status.update(scanned=True, active_ads=len(self._ads))
         except Exception as exc:
             self.status.update(scanned=False, error=f"{type(exc).__name__}: {str(exc)[:160]}")
@@ -147,6 +151,26 @@ class NavJobsIndex:
         with self._lock:
             uuids = list(self._by_name.get(key, [])) if key else []
         return [self._ads[u] for u in uuids[:MAX_CANDIDATES_PER_COMPANY]]
+
+    def loose_candidates(self, legal_name: str, limit: int = MAX_LOOSE_PER_COMPANY) -> list[dict[str, Any]]:
+        """Ads whose employer name starts with the same distinctive word and is a word-subset or superset of the legal name.
+
+        Only a hint for which ads to open: an ad is still published only on an exact organisation-number match.
+        """
+        key = tuple(name_tokens(legal_name))
+        if not key or len(key[0]) < 4:
+            return []
+        wanted = set(key)
+        out: list[dict[str, Any]] = []
+        with self._lock:
+            for uuid in self._by_first.get(key[0], []):
+                ad = self._ads[uuid]
+                tokens = set(name_tokens(ad["business"]))
+                if tokens != wanted and (tokens <= wanted or wanted <= tokens):
+                    out.append(ad)
+                if len(out) >= limit:
+                    break
+        return out
 
     def fetch_entry(self, ad: dict[str, Any]) -> dict[str, Any] | None:
         url = ad.get("url") or f"/api/v1/feedentry/{ad['uuid']}"
@@ -192,6 +216,11 @@ def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[di
             if ad["uuid"] not in seen:
                 seen.add(ad["uuid"])
                 candidates.append(ad)
+    loose = getattr(index, "loose_candidates", None)
+    for ad in (loose(str(profile.get("name") or "")) if loose else []):
+        if ad["uuid"] not in seen:
+            seen.add(ad["uuid"])
+            candidates.append(ad)
     for ad in candidates[:MAX_FETCHES_PER_COMPANY]:
         entry = index.fetch_entry(ad)
         metrics["requests"] += 1
