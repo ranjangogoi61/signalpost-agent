@@ -208,3 +208,19 @@ class JobsIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SubunitJobsTests(unittest.TestCase):
+    def test_ad_carrying_a_registered_subunit_number_is_published(self):
+        pages = {"p1": {"next_url": None, "items": [item("s1", "Kaffebar Grünerløkka"), item("s2", "Kaffebar Grünerløkka"), item("x1", "Norsk Kaffe AS")]}}
+        entries = {"s1": entry("s1", "987654321"), "s2": entry("s2", "555555555"), "x1": entry("x1", "333333333")}
+        index = NavJobsIndex(opener=FakeNav(pages, entries), now=lambda: NOW)
+        index.scan()
+        profile = {**PROFILE, "evidence": {"locations": {"status": "available", "value": {"locations": [{"organisation_number": "987654321", "name": "KAFFEBAR GRÜNERLØKKA"}]}}}}
+        record, metrics = jobs_record(profile, index)
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(record["value"]["active_count"], 1)
+        self.assertEqual(record["value"]["postings"][0]["employer_unit"], "987654321")
+        self.assertEqual(metrics["requests"], 3)
+        record, _ = jobs_record(PROFILE, index)  # without registered subunits nothing matches
+        self.assertEqual(record["status"], "not_found")

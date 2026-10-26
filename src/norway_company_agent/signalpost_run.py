@@ -707,8 +707,8 @@ def run_batch(
         operations["requests_by_phase"]["jobs_confirm"] += metric.get("requests", 0)
 
     def phase_one(org: str) -> None:
-        jobs_phase(profiles[org])
         metric = _official_phase(profiles[org], module_set, budget, fetcher)
+        jobs_phase(profiles[org])  # after the official phase: NAV ads are matched against registered subunits too
         operations["requests_by_phase"]["official"] += metric["requests"]
         operations["bytes"] += metric["bytes"]
         operations["latencies_ms"].extend(metric["latencies_ms"])

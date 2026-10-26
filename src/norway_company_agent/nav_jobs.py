@@ -5,8 +5,9 @@ information must never be exposed. This module therefore publishes only ACTIVE, 
 and keeps title, dates, municipality and the public ad URL; never the description or any contact.
 
 Method: scan the feed once per run (employer name + status per ad), then for each company fetch
-only the few ads whose employer name equals the company's legal name and publish an ad only if
-NAV's own record carries the company's exact nine-digit organisation number.
+only the few ads whose employer name equals the company's legal name (or one of its registered
+subunits' names) and publish an ad only if NAV's own record carries the company's exact nine-digit
+organisation number or that of one of its subunits registered in Enhetsregisteret.
 """
 from __future__ import annotations
 
@@ -158,6 +159,20 @@ class NavJobsIndex:
             return None
 
 
+MAX_FETCHES_PER_COMPANY = 6
+
+
+def own_units(profile: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The company's subunits (underenheter) as registered in Enhetsregisteret: NAV ads usually carry the subunit's number."""
+    locations = (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []
+    units: dict[str, dict[str, Any]] = {}
+    for item in locations if isinstance(locations, list) else []:
+        number = "".join(ch for ch in str((item or {}).get("organisation_number") or "") if ch.isdigit())
+        if len(number) == 9:
+            units[number] = {"name": str((item or {}).get("name") or "")}
+    return units
+
+
 def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[dict[str, Any], dict[str, int]]:
     """Evidence record for the `jobs` module of one company, plus request metrics."""
     org = str(profile.get("organisation_number") or "")
@@ -168,12 +183,22 @@ def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[di
         return evidence("jobs", "source_error", "official_nav_job_feed", url, note=note), metrics
     now = index._now()
     postings: list[dict[str, Any]] = []
-    for ad in index.candidates(str(profile.get("name") or "")):
+    units = own_units(profile)
+    names = [str(profile.get("name") or "")] + [u["name"] for u in units.values() if u.get("name")]
+    seen: set[str] = set()
+    candidates: list[dict[str, Any]] = []
+    for name in names:
+        for ad in index.candidates(name):
+            if ad["uuid"] not in seen:
+                seen.add(ad["uuid"])
+                candidates.append(ad)
+    for ad in candidates[:MAX_FETCHES_PER_COMPANY]:
         entry = index.fetch_entry(ad)
         metrics["requests"] += 1
         data = (entry or {}).get("json") or {}
         employer = data.get("employer") or {}
-        if "".join(ch for ch in str(employer.get("orgnr") or "") if ch.isdigit()) != org:
+        employer_org = "".join(ch for ch in str(employer.get("orgnr") or "") if ch.isdigit())
+        if employer_org != org and employer_org not in units:
             continue
         if str((entry or {}).get("status") or "") != "ACTIVE":
             continue
@@ -188,6 +213,7 @@ def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[di
             "expires": str(data.get("expires") or "")[:10] or None,
             "municipality": city,
             "url": AD_PAGE.format(uuid=ad["uuid"]),
+            "employer_unit": None if employer_org == org else employer_org,
         })
     if index.status.get("truncated"):
         note = "NAV job feed scan was cut short by the run budget; absence of ads cannot be concluded"
@@ -198,4 +224,4 @@ def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[di
     postings.sort(key=lambda p: p["published"] or "", reverse=True)
     value = {"active_count": len(postings), "postings": postings[:MAX_POSTINGS_PUBLISHED], "scan": {"pages": index.status["pages"], "active_ads_in_feed": index.status["active_ads"]}}
     digest = hashlib.sha256(json.dumps(value["postings"], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    return evidence("jobs", "available", "official_nav_job_feed", postings[0]["url"], value=value, content_sha256=digest, note="Active ads only, matched by the organisation number in NAV's own record; contact details are never published."), metrics
+    return evidence("jobs", "available", "official_nav_job_feed", postings[0]["url"], value=value, content_sha256=digest, note="Active ads only, matched by the organisation number in NAV's own record (the company itself or one of its registered subunits); contact details are never published."), metrics
