@@ -195,7 +195,7 @@ def jobs_record(profile: dict[str, Any], index: NavJobsIndex | None) -> tuple[di
     for ad in candidates[:MAX_FETCHES_PER_COMPANY]:
         entry = index.fetch_entry(ad)
         metrics["requests"] += 1
-        data = (entry or {}).get("json") or {}
+        data = (entry or {}).get("ad_content") or (entry or {}).get("json") or {}  # the live feed uses "ad_content"
         employer = data.get("employer") or {}
         employer_org = "".join(ch for ch in str(employer.get("orgnr") or "") if ch.isdigit())
         if employer_org != org and employer_org not in units:

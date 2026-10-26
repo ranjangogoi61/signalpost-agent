@@ -33,7 +33,7 @@ def item(uuid, business, status="ACTIVE"):
 
 
 def entry(uuid, orgnr, status="ACTIVE", expires="2026-11-30T00:00:00Z", title="Barista"):
-    return {"uuid": uuid, "status": status, "json": {"uuid": uuid, "title": title, "published": "2026-10-09T08:00:00Z", "expires": expires, "employer": {"name": "x", "orgnr": orgnr}, "workLocations": [{"municipal": "OSLO"}], "description": "SECRET DESCRIPTION", "contactList": [{"name": "Kari", "email": "kari@x.no", "phone": "99999999"}]}}
+    return {"uuid": uuid, "status": status, "ad_content": {"uuid": uuid, "title": title, "published": "2026-10-09T08:00:00Z", "expires": expires, "employer": {"name": "x", "orgnr": orgnr}, "workLocations": [{"municipal": "OSLO"}], "description": "SECRET DESCRIPTION", "contactList": [{"name": "Kari", "email": "kari@x.no", "phone": "99999999"}]}}
 
 
 class FakeNav:
@@ -224,3 +224,14 @@ class SubunitJobsTests(unittest.TestCase):
         self.assertEqual(metrics["requests"], 3)
         record, _ = jobs_record(PROFILE, index)  # without registered subunits nothing matches
         self.assertEqual(record["status"], "not_found")
+
+
+class LegacyEntryShapeTests(unittest.TestCase):
+    def test_older_json_key_is_still_read(self):
+        pages = {"p1": {"next_url": None, "items": [item("a1", "Norsk Kaffe AS")]}}
+        legacy = entry("a1", "914778271")
+        legacy["json"] = legacy.pop("ad_content")
+        index = NavJobsIndex(opener=FakeNav(pages, {"a1": legacy}), now=lambda: NOW)
+        index.scan()
+        record, _ = jobs_record(PROFILE, index)
+        self.assertEqual(record["status"], "available")
