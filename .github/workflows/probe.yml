@@ -1,0 +1,21 @@
+name: probe
+on:
+  push:
+    branches: [nav-probe]
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          set +e
+          python tools/source_probe.py > probe.txt 2>&1; echo "exit=$?" >> probe.txt
+          git config user.name ci && git config user.email ci@users.noreply.github.com
+          cp probe.txt /tmp/probe.txt
+          git checkout -q --orphan probe-results && git rm -rqf . && cp /tmp/probe.txt . && git add probe.txt && git commit -qm probe && git push -qf origin probe-results
