@@ -34,8 +34,8 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
 | Expected third-party cost | $0 per 100-company run without a key; at most about $0.5 per 100 companies with one |
-| Measured on CI (100 companies, live) | about 1,550 outbound requests (retries and redirects counted) and about 410-480 s, inside the 2,000 request / 45 minute budget; a repeat run reports 0 changes |
-| Measured on CI (1,000 companies, live, same command) | 1,000/1,000 envelopes in input order, all validation checks passed, 14,493 requests (about 1,450 per 100) and 3,749 s (about 375 s per 100), no request refused by the budget |
+| Measured on CI (100 companies, live) | about 1,550-1,600 outbound requests (retries and redirects counted) and about 410-580 s, inside the 2,000 request / 45 minute budget; a repeat run reports 0 changes |
+| Measured on CI (1,000 companies, live, same command) | 1,000/1,000 envelopes in input order, all validation checks passed, 14,635 requests (about 1,460 per 100) and 2,819 s (about 282 s per 100), no request refused by the budget; a retry pass recovered 24 of 26 network-failed official lookups |
 
 ## What it publishes
 
