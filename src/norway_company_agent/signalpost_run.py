@@ -662,6 +662,13 @@ def _apply_open_registers(registers: OpenRegisters | None, profiles: dict[str, d
     wanted = [m for m in REGISTER_MODULES if m in modules]
     if registers is None or not (wanted or registers.include_osm):
         return None
+    if not any((profiles.get(org) or {}).get("anchor") not in (None, "none") for org in orgs):
+        for org in orgs:  # nothing to join against: no downloads, and every register fact is simply not available
+            if org in profiles:
+                for module in wanted:
+                    name, url, source_type, label = REGISTER_MODULES[module]
+                    profiles[org]["evidence"][module] = evidence(module, "not_found", source_type, url, note=f"Organisation number not found in the register, so it is not looked up in the {label}.")
+        return {"skipped": "no registered company in this batch"}
     try:
         status = registers.load()
     except Exception as exc:

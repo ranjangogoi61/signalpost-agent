@@ -6,6 +6,7 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 
+import ipaddress
 import socket
 
 import pytest
@@ -24,6 +25,20 @@ def _no_real_network_in_unit_tests(monkeypatch):
             raise OSError(f"network access blocked in unit tests: {address}")
         return original(self, address)
 
+    original_getaddrinfo = socket.getaddrinfo
+
+    def guarded_dns(host, *args, **kwargs):
+        try:
+            ipaddress.ip_address(str(host))
+            literal = True  # resolving an IP literal never leaves the machine
+        except ValueError:
+            literal = False
+        if not literal and str(host) not in {"localhost"}:
+            attempts.append(f"dns:{host}")
+            raise OSError(f"DNS lookup blocked in unit tests: {host}")
+        return original_getaddrinfo(host, *args, **kwargs)
+
     monkeypatch.setattr(socket.socket, "connect", guarded)
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_dns)
     yield
     assert not attempts, f"unit test tried to reach the network: {attempts}"

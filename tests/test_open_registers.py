@@ -87,3 +87,16 @@ class JoinTests(unittest.TestCase):
         self.assertIn("latest, on 2026-01-15", text)
         self.assertEqual(report["operations"]["requests_by_phase"]["open_registers"], 4)
         self.assertEqual(profiles[0].get("register_websites"), ["www.norskkaffe.no", "https://kaffebar.no"])
+
+
+class NoDownloadWithoutCompaniesTests(unittest.TestCase):
+    def test_batch_without_registered_companies_downloads_nothing(self):
+        from test_signalpost_run import MODULES, FakeApi, rows_for, site_ok
+
+        from norway_company_agent.signalpost_run import Budget, run_batch
+
+        calls = []
+        registers = OpenRegisters(downloader=lambda url, data=None: calls.append(url) or {"ok": False, "error": "x"})
+        envelopes, _, report = run_batch(rows_for("000000000", "x"), run_id="t", modules=MODULES + ["cleaning_register"], budget=Budget(1000, 1000), workers=1, fetcher=FakeApi(), site_fetcher=site_ok, discovery_fetcher=None, reverifier=None, open_registers=registers)
+        self.assertEqual(calls, [])
+        self.assertTrue(report["validation"]["passed"], report["validation"])
