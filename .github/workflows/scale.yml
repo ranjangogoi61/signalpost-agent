@@ -40,4 +40,4 @@ jobs:
           mkdir -p /tmp/r && cp out/scale-summary.json out/scale-log.txt out/profiles-1000.html /tmp/r/ 2>/dev/null; ls -l /tmp/r
           git config user.name ci && git config user.email ci@users.noreply.github.com
           git checkout -q --orphan scale-results && git rm -rqf . && rm -rf out scale-companies.jsonl universe.jsonl.gz src/norway_company_agent/__pycache__
-          cp /tmp/r/* . ; git add scale-summary.json scale-log.txt profiles-1000.html 2>/dev/null; git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
+          cp /tmp/r/* . ; for f in scale-summary.json scale-log.txt profiles-1000.html; do [ -f "$f" ] && git add "$f"; done; git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
