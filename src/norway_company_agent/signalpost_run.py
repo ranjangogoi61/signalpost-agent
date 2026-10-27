@@ -42,6 +42,7 @@ from .refresh import diff_profile
 from .domain_discovery import discover_website, reverify_registry_website
 from .registry_updates import fetch_registry_updates
 from .wikidata import wikidata_websites
+from .open_registers import BHT_URL, RENHOLD_URL, SMILEFJES_URL, OpenRegisters
 from .nav_jobs import NavJobsIndex, jobs_record
 from .synthesis import check_synthesis, summarize_envelope
 from .sampling import normalize_row
@@ -590,6 +591,10 @@ def contract_view(profile: dict[str, Any], modules: Iterable[str], *, run_id: st
     if "updates" in set(modules):
         value = (profile.get("evidence", {}).get("updates") or {}).get("value") or None
         add("updates", "recent_registry_changes", value, f"org={org} register updates since {(value or {}).get('since')}: {(value or {}).get('update_count')} (latest {(value or {}).get('latest_update')})")
+    for module, field in (("cleaning_register", "cleaning_approval"), ("ohs_register", "occupational_health_approval"), ("food_inspections", "food_safety_inspections")):
+        if module in set(modules):
+            value = (profile.get("evidence", {}).get(module) or {}).get("value") or None
+            add(module, field, value, f"org={org} {module}: {json.dumps(value, ensure_ascii=False)[:160] if value else None}")
     if "jobs" in set(modules):
         value = (profile.get("evidence", {}).get("jobs") or {}).get("value") or {}
         add("jobs", "job_postings", {"active_count": value.get("active_count"), "postings": value.get("postings")} if value.get("postings") else None, f"org={org} NAV job feed: {value.get('active_count')} active ad(s) with this organisation number")
@@ -645,6 +650,48 @@ def _failed_row_envelope(row: dict[str, Any], run_id: str, started_at: str, comp
     return envelope
 
 
+REGISTER_MODULES = {
+    "cleaning_register": ("renhold", RENHOLD_URL, "official_cleaning_register", "Arbeidstilsynet renholdsregister"),
+    "ohs_register": ("bht", BHT_URL, "official_ohs_register", "Arbeidstilsynet register of approved occupational health services"),
+    "food_inspections": ("smilefjes", SMILEFJES_URL, "official_food_inspections", "Mattilsynet smilefjes inspections"),
+}
+
+
+def _apply_open_registers(registers: OpenRegisters | None, profiles: dict[str, dict[str, Any]], orgs: list[str], modules: set[str], operations: dict[str, Any]) -> dict[str, Any] | None:
+    """One bulk download per open register, then exact organisation-number joins (no per-company requests)."""
+    wanted = [m for m in REGISTER_MODULES if m in modules]
+    if registers is None or not (wanted or registers.include_osm):
+        return None
+    try:
+        status = registers.load()
+    except Exception as exc:
+        status = {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+    operations["requests_by_phase"]["open_registers"] += registers.requests
+    for org in orgs:
+        profile = profiles.get(org)
+        if profile is None:
+            continue
+        anchored = profile.get("anchor") != "none"
+        for module in wanted:
+            name, url, source_type, label = REGISTER_MODULES[module]
+            meta = registers.sources.get(name) or {}
+            if not registers.ok(name):
+                profile["evidence"][module] = evidence(module, "source_error", source_type, url, note=f"{label} could not be read: {meta.get('error')}")
+                continue
+            value = None
+            if anchored:
+                value = registers.inspections(profile) if name == "smilefjes" else registers.approval(name, profile)
+            if value:
+                profile["evidence"][module] = evidence(module, "available", source_type, url, value=value, retrieved_at=meta.get("retrieved_at"), content_sha256=meta.get("sha256"), source_row_key=org)
+            else:
+                profile["evidence"][module] = evidence(module, "not_found", source_type, url, retrieved_at=meta.get("retrieved_at"), content_sha256=meta.get("sha256"), note=f"This organisation number (or its registered subunits) is not in the {label}.")
+        if anchored:
+            hosts = registers.register_website(profile) + (registers.osm_websites(profile) if registers.include_osm else [])
+            if hosts:
+                profile["register_websites"] = hosts
+    return status
+
+
 # --------------------------------------------------------------------------- driver
 
 def run_batch(
@@ -664,6 +711,7 @@ def run_batch(
     reverifier: Callable[[dict[str, Any], dict[str, Any]], tuple[dict, dict]] | None = reverify_registry_website,
     jobs_index: NavJobsIndex | None = None,
     wikidata_fetcher: Callable[..., tuple[dict[str, list[str]], dict[str, Any]]] | None = wikidata_websites,
+    open_registers: OpenRegisters | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     started_at = utc_now()
     t0 = time.monotonic()
@@ -724,6 +772,7 @@ def run_batch(
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         list(pool.map(phase_one, valid_orgs))
+        registers_status = _apply_open_registers(open_registers, profiles, valid_orgs, module_set, operations)
         if "website" in module_set and discovery_fetcher is not None and wikidata_fetcher is not None:
             needing = [org for org in valid_orgs if profiles[org].get("anchor") != "none" and not profiles[org].get("website")]
             if needing and budget.fraction_used() < discovery_soft_limit:
@@ -739,10 +788,13 @@ def run_batch(
         with_site = [org for org in valid_orgs if profiles[org].get("website")]
         without_site = [org for org in valid_orgs if not profiles[org].get("website")]
         discovery_for_run = discovery_fetcher
-        if discovery_fetcher is discover_website and without_site:
+        base = getattr(discovery_fetcher, "func", discovery_fetcher)
+        if base is discover_website and without_site:
             reserve = discovery_soft_limit * budget.max_requests - budget.requests - 8 * len(with_site)
             cap = max(4, min(14, int(reserve / len(without_site))))
-            discovery_for_run = functools.partial(discover_website, max_requests=cap)
+            keywords = dict(getattr(discovery_fetcher, "keywords", {}) or {})
+            keywords["max_requests"] = cap
+            discovery_for_run = functools.partial(discover_website, **keywords)
             operations["discovery_cap_per_company"] = cap
         list(pool.map(phase_two, with_site + without_site))
 
@@ -791,6 +843,7 @@ def run_batch(
             "requests": budget.requests,
             "requests_by_phase": dict(operations["requests_by_phase"]),
             "requests_refused_by_budget": budget.refused,
+            "open_registers": registers_status,
             "discovery_cap_per_company": operations.get("discovery_cap_per_company"),
             "bytes": operations["bytes"],
             "runtime_ms": runtime_ms,

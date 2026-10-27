@@ -27,6 +27,10 @@ Every envelope carries a deterministic `synthesis` (what the company is, what it
 
 Every run also writes an offline single-file viewer next to the report (`<report dir>/site/index.html`, or `--site-output`): search by name or organisation number, filter, open a company, compare 2 to 4 companies, and inspect each fact's source URL, retrieval time and SHA-256. It works on mobile and desktop and makes no external requests. `scripts/build_viewer.py` rebuilds it from an envelope file; `--hide-person-names` produces a public demo.
 
+## Open registers (one download each per run)
+
+Three open public registers are downloaded once per run and joined on the exact organisation number (the company's own or one of its subunits registered in Enhetsregisteret): Arbeidstilsynet's register of approved cleaning companies (`renhold_register.xml`), Arbeidstilsynet's register of approved occupational health services (`bht_register.xml`), and Mattilsynet's food-safety inspections (`smilefjes.mattilsynet.no/api/tilsyn.csv`, latest grade, date and number of inspected outlets). Phone numbers and person names are never kept. A failed download makes only that fact `failed`. One OpenStreetMap Overpass query for objects tagged `ref:NO:orgnr` (ODbL) and the websites listed in the Arbeidstilsynet registers are used only as candidate website hosts for discovery; a website is still published only when its own page prints the exact organisation number. Total cost: four requests per run.
+
 ## Register activity (Enhetsregisteret update feed)
 
 Recent public activity comes from the register's own open update feed (`/api/oppdateringer/enheter`): one request per 100 organisation numbers covering the last 365 days. For each company the agent publishes how many updates were published, the latest date and change type, and the names of the register fields that changed (for example business address or name). Changed values are never copied, and phone-number changes are dropped. No updates in the window is `not_available`; a failed feed request is `failed` for that chunk only.

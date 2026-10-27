@@ -13,13 +13,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from norway_company_agent.open_registers import OpenRegisters  # noqa: E402
 from norway_company_agent.domain_discovery import discover_website, make_brave_searcher, reverify_registry_website  # noqa: E402
 from norway_company_agent.evidence import utc_now  # noqa: E402
 from norway_company_agent.nav_jobs import NavJobsIndex  # noqa: E402
 from norway_company_agent.viewer import build_viewer  # noqa: E402
 from norway_company_agent.signalpost_run import AVAILABILITY_STATES, Budget, _failed_row_envelope, read_rows, run_batch, validate  # noqa: E402
 
-DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,updates,website,jobs"
+DEFAULT_MODULES = "registry,accounting_obligation,registry_live,financials,financial_history,roles,group,locations,updates,cleaning_register,ohs_register,food_inspections,website,jobs"
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -87,6 +88,7 @@ def main(argv: list[str] | None = None) -> None:
             discovery_fetcher=None if args.no_discovery else functools.partial(discover_website, searcher=searcher),
             reverifier=None if args.no_discovery else reverify_registry_website,
             jobs_index=jobs_index,
+            open_registers=OpenRegisters(include_osm=not args.no_discovery) if (any(m in modules for m in ("cleaning_register", "ohs_register", "food_inspections")) or not args.no_discovery) else None,
         )
     except Exception as exc:  # last line of defence: still emit exactly one envelope per input row
         crashed = f"{type(exc).__name__}: {str(exc)[:200]}"

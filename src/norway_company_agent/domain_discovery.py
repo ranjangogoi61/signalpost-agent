@@ -369,7 +369,7 @@ def discover_website(
         except Exception:
             searched = []
     email_host = registry_email_host(profile)
-    wikidata = [h for h in (_clean_host(x) for x in profile.get("wikidata_websites") or []) if h][:2]
+    wikidata = [h for h in (_clean_host(x) for x in list(profile.get("register_websites") or []) + list(profile.get("wikidata_websites") or [])) if h][:3]
     subunits = subunit_hosts(profile)
     leading = ([email_host] if email_host else []) + wikidata + subunits + searched
     hosts = list(dict.fromkeys(leading + candidate_hosts(str(profile.get("name") or ""))))[: MAX_CANDIDATES + 6]

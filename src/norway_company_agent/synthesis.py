@@ -43,6 +43,9 @@ FIELD_LABELS = {
     "last_submitted_annual_accounts": "last submitted annual accounts",
     "vat_registered_on": "VAT registration date",
     "recent_registry_changes": "recent register updates",
+    "cleaning_approval": "cleaning-company approval (Arbeidstilsynet)",
+    "occupational_health_approval": "occupational health service approval (Arbeidstilsynet)",
+    "food_safety_inspections": "food-safety inspections (Mattilsynet)",
 }
 STATE_WORDS = {
     "not_available": "not found",
@@ -210,6 +213,15 @@ def summarize_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         u = updates["value"]
         changed = ", ".join(u.get("changed_fields") or []) or "unspecified fields"
         add(f"Since {u.get('since')} the register has published {u.get('update_count')} update(s) for it, the latest on {u.get('latest_update')} ({u.get('latest_type')}; changed: {changed}).", ["recent_registry_changes"])
+
+    for field, label in (("cleaning_approval", "Arbeidstilsynet's register of cleaning companies"), ("occupational_health_approval", "Arbeidstilsynet's register of occupational health services")):
+        claim = claims.get(field)
+        if _have(claim) and isinstance(claim["value"], dict):
+            add(f"It is listed in {label} with status: {claim['value'].get('status') or 'not stated'}.", [field])
+    food = claims.get("food_safety_inspections")
+    if _have(food) and isinstance(food["value"], dict):
+        f = food["value"]
+        add(f"Mattilsynet has published {f.get('inspection_count')} food-safety inspection(s) across {f.get('outlet_count')} outlet(s); the latest, on {f.get('latest_date')}, gave a {f.get('latest_grade_meaning')}.", ["food_safety_inspections"])
 
     for text, fields in assessment(claims):
         add(text, fields)
