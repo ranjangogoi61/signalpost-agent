@@ -87,9 +87,9 @@ table{border-collapse:collapse;width:100%;font-size:.93rem}th,td{border-bottom:1
 <header class="top"><h1 id="title"></h1><div class="sub">Evidence-first company profiles from Norwegian organisation numbers</div><div class="sub" id="runmeta"></div><details><summary>What do the states mean?</summary><div id="legend"></div></details></header>
 <div class="stats" id="stats" aria-label="Run summary"></div>
 <div class="bar" role="search">
-<label for="q">Find</label><input id="q" type="search" placeholder="Name or organisation number" autocomplete="off">
+<label for="q">Find</label><input id="q" type="search" placeholder="Name, organisation number, place or industry" autocomplete="off">
 <label for="f">Show</label>
-<select id="f"><option value="all">All companies</option><option value="site">With a verified website</option><option value="nosite">Without a verified website</option><option value="jobs">With active job ads</option><option value="attention">Ambiguous, blocked or failed</option><option value="changed">With changes</option></select>
+<select id="f"><option value="all">All companies</option><option value="site">With a verified website</option><option value="nosite">Without a verified website</option><option value="jobs">With active job ads</option><option value="registers">With official approvals or inspections</option><option value="profit">Latest accounts: profit</option><option value="loss">Latest accounts: loss</option><option value="winding">Bankrupt or winding down</option><option value="attention">Ambiguous, blocked or failed</option><option value="changed">With changes</option></select>
 <button id="cmpbtn" class="primary" type="button">Compare selected (0)</button><button id="clr" type="button" class="ghost">Clear</button><button id="csv" type="button" class="ghost">Export CSV</button>
 </div>
 <main>
@@ -131,9 +131,10 @@ function completeness(c){var n=0;c.claims.forEach(function(x){if(x.availability=
 var sel={},tab="summary",PAGE=25,shown=PAGE;
 function renderStats(){var facts=0,sites=0,jobs=0,changed=0;D.companies.forEach(function(c){facts+=completeness(c)[0];if(ok(c,"official_website"))sites++;if(ok(c,"job_postings"))jobs++;if(c.changes.length)changed++});
  var box=$("stats");box.textContent="";[[D.companies.length,"companies"],[facts,"facts published, each with a source"],[sites,"verified websites"],[jobs,"with active job ads"],[changed,"with changes since last run"]].forEach(function(t){box.appendChild(el("div",{class:"stat"},[el("b",{text:fmtNum(t[0])}),el("span",{text:t[1]})]))})}
+function textOf(c){if(c._t==null){c._t=["municipality","industry","business_address"].map(function(f){var x=claimOf(c,f);return x&&x.availability==="available"?String(valueText(f,x.value)):""}).join(" ").toLowerCase()}return c._t}
 function filtered(){var q=$("q").value.trim().toLowerCase(),f=$("f").value;return D.companies.filter(function(c){
- if(q&&c.name.toLowerCase().indexOf(q)<0&&String(c.org).indexOf(q.replace(/\s/g,""))<0)return false;
- if(f==="site")return ok(c,"official_website");if(f==="nosite")return !ok(c,"official_website");if(f==="jobs")return ok(c,"job_postings");if(f==="attention")return attention(c);if(f==="changed")return c.changes.length>0;return true})}
+ if(q&&c.name.toLowerCase().indexOf(q)<0&&String(c.org).indexOf(q.replace(/\s/g,""))<0&&textOf(c).indexOf(q)<0)return false;
+ if(f==="site")return ok(c,"official_website");if(f==="nosite")return !ok(c,"official_website");if(f==="jobs")return ok(c,"job_postings");if(f==="registers")return ok(c,"cleaning_approval")||ok(c,"occupational_health_approval")||ok(c,"food_safety_inspections");if(f==="profit"||f==="loss"){var fin=claimOf(c,"financials_latest");var r=fin&&fin.availability==="available"&&fin.value?fin.value.annual_result:null;return typeof r==="number"&&(f==="profit"?r>0:r<0)}if(f==="winding"){var st=claimOf(c,"legal_status");return !!st&&st.availability==="available"&&st.value!=="active"}if(f==="attention")return attention(c);if(f==="changed")return c.changes.length>0;return true})}
 function renderList(reset){if(reset!==false)shown=PAGE;var box=$("list");box.textContent="";var rows=filtered();
  if(!rows.length){box.appendChild(el("div",{class:"empty",text:"No company matches this search."}));return}
  box.appendChild(el("div",{class:"meta",style:"margin:0 2px 8px",text:"Showing "+Math.min(shown,rows.length)+" of "+rows.length}));
