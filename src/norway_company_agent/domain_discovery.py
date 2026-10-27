@@ -46,7 +46,13 @@ SUBUNIT_METHOD = "subunit_registry_candidate_exact_org_number_v1"
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 MAX_CANDIDATES = 8
 GENERIC_TOKENS = {"norge", "norway", "gruppen", "group", "holding", "invest", "eiendom", "service", "services", "consulting", "norden"}
-MAX_EXTRA_PAGES = 2
+MAX_EXTRA_PAGES = 3
+# Pages where Norwegian sites are most likely to print their organisation number (webshops must, in their terms).
+OWNERSHIP_TERMS = (
+    "kontakt", "contact", "om-oss", "om_oss", "omoss", "about",
+    "salgsbetingelser", "kjopsbetingelser", "kjøpsbetingelser", "kjopsvilkar", "kjøpsvilkår", "vilkar", "vilkår", "betingelser", "terms",
+    "personvern", "privacy", "cookie", "impressum", "firma", "selskap",
+)
 
 
 def _fold(value: str) -> str:
@@ -306,6 +312,31 @@ def _fetch_page_once(url: str, *, timeout: float = 12.0, max_bytes: int = 1_500_
     return result
 
 
+def ownership_links(base_url: str, soup: BeautifulSoup, limit: int = MAX_EXTRA_PAGES) -> list[str]:
+    """Same-host links ranked by how likely the page is to print the organisation number."""
+    base = urllib.parse.urlparse(base_url)
+    ranked: dict[str, int] = {}
+    for anchor in soup.select("a[href]"):
+        url = urllib.parse.urljoin(base_url, str(anchor.get("href") or "").strip())
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or (parsed.hostname or "").casefold() != (base.hostname or "").casefold():
+            continue
+        haystack = _fold(urllib.parse.unquote(parsed.path) + " " + anchor.get_text(" ", strip=True))
+        rank = next((i for i, term in enumerate(OWNERSHIP_TERMS) if _fold(term) in haystack), None)
+        if rank is None:
+            continue
+        clean = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
+        if clean.rstrip("/") == base_url.rstrip("/"):
+            continue
+        ranked[clean] = min(rank, ranked.get(clean, rank))
+    by_rank = sorted(ranked.items(), key=lambda item: (item[1], item[0]))
+    # one contact/about page first, then a terms/privacy page, then the next best
+    contact = [u for u, r in by_rank if r < 6]
+    terms = [u for u, r in by_rank if r >= 6]
+    ordered = contact[:1] + terms[:1] + [u for u, _ in by_rank if u not in contact[:1] + terms[:1]]
+    return ordered[:limit]
+
+
 def verify_host(host: str, org: str, fetch_page: Callable[[str], dict[str, Any]]) -> dict[str, Any]:
     stats = {"requests": 0, "bytes": 0, "latencies_ms": []}
     out: dict[str, Any] = {"host": host, "verified": False, "page_url": None, "final_url": None, "error": None, "stats": stats}
@@ -340,7 +371,7 @@ def verify_host(host: str, org: str, fetch_page: Callable[[str], dict[str, Any]]
         return out
     soup = BeautifulSoup(home["html"], "lxml")
     home_domain = _registered_domain(home["final_url"])
-    for link in _priority_links(home["final_url"], soup, limit=MAX_EXTRA_PAGES):
+    for link in ownership_links(home["final_url"], soup, limit=MAX_EXTRA_PAGES):
         if _registered_domain(link) != home_domain:
             continue
         page = fetch_page(link)

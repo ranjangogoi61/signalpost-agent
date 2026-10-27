@@ -141,3 +141,26 @@ class RegistryEmailDomainTests(unittest.TestCase):
         self.assertIsNone(registry_email_host(self._profile("brage@gmail.com")))
         self.assertIsNone(registry_email_host(self._profile("not-an-email")))
         self.assertIsNone(registry_email_host(PROFILE))
+
+
+class OwnershipLinkTests(unittest.TestCase):
+    def test_terms_and_privacy_pages_are_checked_for_the_org_number(self):
+        from bs4 import BeautifulSoup
+
+        from norway_company_agent.domain_discovery import ownership_links
+
+        html = '<a href="/produkter">Produkter</a><a href="/kontakt">Kontakt</a><a href="/kjøpsvilkår">Kjøpsvilkår</a><a href="/personvern">Personvern</a><a href="https://other.no/vilkar">x</a>'
+        links = ownership_links("https://norskkaffe.no/", BeautifulSoup(html, "lxml"))
+        self.assertEqual(links[0], "https://norskkaffe.no/kontakt")
+        self.assertIn("kj", links[1])
+        self.assertEqual(len(links), 3)
+        self.assertFalse(any("other.no" in u or "produkter" in u for u in links))
+
+    def test_org_number_on_terms_page_proves_ownership(self):
+        pages = {
+            "https://norskkaffe.no/": page('<a href="/salgsbetingelser">Salgsbetingelser</a><p>Velkommen</p>'),
+            "https://norskkaffe.no/salgsbetingelser": page("<p>Norsk Kaffe AS, org.nr. 914 778 271</p>", url="https://norskkaffe.no/salgsbetingelser"),
+        }
+        result = verify_host("norskkaffe.no", ORG, lambda url: pages.get(url, {"ok": False, "requests": 1, "error": "404"}))
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["page_url"], "https://norskkaffe.no/salgsbetingelser")
