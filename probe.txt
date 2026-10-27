@@ -1,0 +1,4 @@
+gap=1.0s n=60 elapsed=90s statuses={200: 60} first_429_at=None rate_headers=['x-rate-limit-remaining']
+gap=0.5s n=60 elapsed=60s statuses={200: 60} first_429_at=None rate_headers=['x-rate-limit-remaining']
+gap=0.25s n=60 elapsed=45s statuses={200: 60} first_429_at=None rate_headers=['x-rate-limit-remaining']
+exit=0
