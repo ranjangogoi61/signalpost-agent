@@ -30,13 +30,14 @@ jobs:
             echo "wall_seconds=$(( $(date +%s) - START ))"
             wc -l out/envelopes.jsonl
             uv run python scripts/summarize_run.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/scale-summary.json > /dev/null; echo "summary=$?"
+            uv run python scripts/build_viewer.py --envelopes out/envelopes.jsonl --report out/run-report.json --out out/profiles-1000.html --hide-person-names; echo "viewer=$?"
           } > out/log.txt 2>&1
           grep -vE "Nordmann" out/log.txt | grep -E "=|envelopes|companies|Error|Traceback|line [0-9]+" | tail -40 > out/scale-log.txt
           cat out/scale-log.txt
       - name: Publish counts to scale-results
         if: always()
         run: |
-          mkdir -p /tmp/r && cp out/scale-summary.json out/scale-log.txt /tmp/r/ 2>/dev/null; ls /tmp/r
+          mkdir -p /tmp/r && cp out/scale-summary.json out/scale-log.txt out/profiles-1000.html /tmp/r/ 2>/dev/null; ls -l /tmp/r
           git config user.name ci && git config user.email ci@users.noreply.github.com
           git checkout -q --orphan scale-results && git rm -rqf . && rm -rf out scale-companies.jsonl universe.jsonl.gz
           cp /tmp/r/* . ; git add -A . && git commit -qm "scale results for ${GITHUB_SHA::7}" && git push -qf origin scale-results
