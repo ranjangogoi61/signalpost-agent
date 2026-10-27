@@ -367,3 +367,26 @@ class RefreshNoiseTests(unittest.TestCase):
         self.assertEqual(diff_profile(prof("not_found", None), prof("available", "New")), [])
         changes = diff_profile(prof("available", "Old"), prof("available", "New"))
         self.assertEqual([c["field"] for c in changes], ["website.title"])
+
+
+class HistoryPacingTests(unittest.TestCase):
+    def test_429_slows_the_run_and_retries_once(self):
+        from norway_company_agent import official
+        from norway_company_agent.http import FetchResult
+
+        old_gap, old_last = official._history_gap, official._history_last_request
+        calls, sleeps = [], []
+
+        def fetch(url):
+            calls.append(url)
+            return FetchResult(url, 0, 1, 0, error="HTTP 429") if len(calls) == 1 else FetchResult(url, 200, 1, 2, ["2025"])
+
+        try:
+            official._history_gap, official._history_last_request = official.HISTORY_GAP_FAST, 0.0
+            result = official._fetch_history("https://x/aar", fetch=fetch, sleeper=sleeps.append)
+            self.assertEqual(result.status, 200)
+            self.assertEqual(len(calls), 2)
+            self.assertIn(15.0, sleeps)
+            self.assertEqual(official._history_gap, official.HISTORY_GAP_SAFE)
+        finally:
+            official._history_gap, official._history_last_request = old_gap, old_last

@@ -709,11 +709,11 @@ class OperationsTests(unittest.TestCase):
 
         try:
             official._history_last_request = 9.0
-            _reserve_history_slot(clock, sleeper)
+            _reserve_history_slot(clock, sleeper, gap=2.1)
             self.assertAlmostEqual(sleeps[0], 1.1)
             self.assertAlmostEqual(official._history_last_request, 11.1)
             now[0] = 13.3
-            _reserve_history_slot(clock, sleeper)
+            _reserve_history_slot(clock, sleeper, gap=2.1)
             self.assertEqual(len(sleeps), 1)
             self.assertAlmostEqual(official._history_last_request, 13.3)
         finally:
