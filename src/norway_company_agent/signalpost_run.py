@@ -650,6 +650,41 @@ def _failed_row_envelope(row: dict[str, Any], run_id: str, started_at: str, comp
     return envelope
 
 
+def _retry_failed_official(profiles: dict[str, dict[str, Any]], orgs: list[str], modules: set[str], budget: Budget, fetcher: Callable[[str], FetchResult], pool: Any) -> dict[str, int]:
+    """One second chance for official lookups that failed on the network (never for budget refusals or 404s)."""
+    todo: list[tuple[str, str]] = []
+    for org in orgs:
+        profile = profiles.get(org) or {}
+        if profile.get("anchor") == "none":
+            continue
+        for module in modules & set(OFFICIAL_MODULES):
+            record = (profile.get("evidence") or {}).get(module) or {}
+            note = str(record.get("note") or "")
+            if record.get("status") == "source_error" and "budget" not in note.casefold():
+                todo.append((org, module))
+    stats = {"attempted": 0, "recovered": 0}
+    if not todo or budget.fraction_used() > 0.6:
+        return stats
+
+    def retry(item: tuple[str, str]) -> bool:
+        org, module = item
+        try:
+            records, metrics = fetch_official_modules(org, {module}, fetcher=fetcher)
+        except Exception:
+            return False
+        _add_metrics(profiles[org], len(metrics))
+        record = records.get(module) or {}
+        if record.get("status") != "source_error":
+            profiles[org]["evidence"][module] = record
+            return True
+        return False
+
+    time.sleep(2.0 if fetcher is fetch_json else 0.0)
+    results = list(pool.map(retry, todo[:200]))
+    stats.update(attempted=len(results), recovered=sum(1 for r in results if r))
+    return stats
+
+
 REGISTER_MODULES = {
     "cleaning_register": ("renhold", RENHOLD_URL, "official_cleaning_register", "Arbeidstilsynet renholdsregister"),
     "ohs_register": ("bht", BHT_URL, "official_ohs_register", "Arbeidstilsynet register of approved occupational health services"),
@@ -779,6 +814,7 @@ def run_batch(
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         list(pool.map(phase_one, valid_orgs))
+        operations["official_retries"] = _retry_failed_official(profiles, valid_orgs, module_set, budget, fetcher, pool)
         registers_status = _apply_open_registers(open_registers, profiles, valid_orgs, module_set, operations)
         if "website" in module_set and discovery_fetcher is not None and wikidata_fetcher is not None:
             needing = [org for org in valid_orgs if profiles[org].get("anchor") != "none" and not profiles[org].get("website")]
@@ -803,7 +839,9 @@ def run_batch(
             keywords["max_requests"] = cap
             discovery_for_run = functools.partial(discover_website, **keywords)
             operations["discovery_cap_per_company"] = cap
-        list(pool.map(phase_two, with_site + without_site))
+        # Websites live on different hosts, so this phase can run wider than the official (BRREG) phase.
+        with ThreadPoolExecutor(max_workers=max(1, min(16, workers * 2))) as web_pool:
+            list(web_pool.map(phase_two, with_site + without_site))
 
     completed_at = utc_now()
     runtime_ms = int((time.monotonic() - t0) * 1000)
@@ -851,6 +889,7 @@ def run_batch(
             "requests_by_phase": dict(operations["requests_by_phase"]),
             "requests_refused_by_budget": budget.refused,
             "open_registers": registers_status,
+            "official_retries": operations.get("official_retries"),
             "discovery_cap_per_company": operations.get("discovery_cap_per_company"),
             "bytes": operations["bytes"],
             "runtime_ms": runtime_ms,

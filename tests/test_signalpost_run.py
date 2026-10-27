@@ -390,3 +390,28 @@ class HistoryPacingTests(unittest.TestCase):
             self.assertEqual(official._history_gap, official.HISTORY_GAP_SAFE)
         finally:
             official._history_gap, official._history_last_request = old_gap, old_last
+
+
+class OfficialRetryTests(unittest.TestCase):
+    def test_network_failure_gets_one_second_chance(self):
+        from norway_company_agent.http import FetchResult
+
+        class Flaky(FakeApi):
+            def __init__(self):
+                super().__init__()
+                self.roles_calls = 0
+
+            def __call__(self, url):
+                if "roller" in url:
+                    self.roles_calls += 1
+                    if self.roles_calls == 1:
+                        self.calls.append(url)
+                        return FetchResult(url, 0, 1, 0, error="HTTP 503")
+                return super().__call__(url)
+
+        api = Flaky()
+        envelopes, _, report, _ = run(["914778271"], api=api)
+        claims = {c["field"]: c for c in envelopes[0]["claims"]}
+        self.assertEqual(claims["role_holders"]["availability"], "available")
+        self.assertEqual(report["operations"]["official_retries"], {"attempted": 1, "recovered": 1})
+        self.assertTrue(report["validation"]["passed"])
