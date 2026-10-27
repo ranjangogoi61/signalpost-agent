@@ -1,0 +1,17 @@
+curl=0
+Wrote 1,000 companies to scale-companies.jsonl
+select=0
+1000 scale-companies.jsonl
+Assuming this really is an XML document, what you're doing might work, but you should know that using an XML parser will be more reliable. To parse this document as XML, make sure you have the Python package 'lxml' installed, and pass the keyword argument `features="xml"` into the BeautifulSoup constructor.
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+  soup = BeautifulSoup(html, "lxml")
+Assuming this really is an XML document, what you're doing might work, but you should know that using an XML parser will be more reliable. To parse this document as XML, make sure you have the Python package 'lxml' installed, and pass the keyword argument `features="xml"` into the BeautifulSoup constructor.
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+  soup = BeautifulSoup(home["html"], "lxml")
+  "emitted_envelopes": 1000,
+run_exit=0
+wall_seconds=2824
+1000 out/envelopes.jsonl
+summary=0
+wrote out/profiles-1000.html (18,513,767 bytes, 1000 companies)
+viewer=0

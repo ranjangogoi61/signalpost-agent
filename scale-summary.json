@@ -1,0 +1,292 @@
+{
+  "envelopes": 1000,
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "same_order_as_input": true,
+      "all_modules_have_six_state_availability": true,
+      "every_available_claim_has_evidence": true,
+      "synthesis_cites_existing_evidence": true,
+      "no_value_on_unavailable_claim": true,
+      "matches_expected_count": true
+    }
+  },
+  "operations": {
+    "requests": 14635,
+    "requests_by_phase": {
+      "jobs_scan": 90,
+      "updates": 10,
+      "jobs_confirm": 14,
+      "official": 5000,
+      "open_registers": 4,
+      "wikidata": 9,
+      "website": 1166,
+      "discovery": 7126
+    },
+    "requests_refused_by_budget": 0,
+    "open_registers": {
+      "renhold": {
+        "ok": true,
+        "entries": 7992,
+        "error": null
+      },
+      "bht": {
+        "ok": true,
+        "entries": 128,
+        "error": null
+      },
+      "smilefjes": {
+        "ok": true,
+        "entries": 7985,
+        "error": null
+      },
+      "osm": {
+        "ok": true,
+        "entries": 5094,
+        "error": null
+      }
+    },
+    "official_retries": {
+      "attempted": 26,
+      "recovered": 24
+    },
+    "discovery_cap_per_company": 10,
+    "bytes": 378707060,
+    "runtime_ms": 2819558,
+    "p50_ms": 500,
+    "p95_ms": 1196,
+    "third_party_cost_usd": 0.0,
+    "search_queries": 0
+  },
+  "budget": {
+    "max_requests": 19000,
+    "max_seconds": 24000,
+    "exhausted": false
+  },
+  "registry_anchor": {
+    "bulk_used": false,
+    "from_bulk": 0,
+    "from_live_batch": 994,
+    "from_direct": 6,
+    "missing": 0
+  },
+  "discovery": {
+    "attempted": 894,
+    "verified": 38,
+    "method": "domain_guess_exact_org_number_v1",
+    "verified_by_method": {
+      "registry_website_exact_org_number_v1": 15,
+      "domain_guess_exact_org_number_v1": 34,
+      "registry_email_domain_exact_org_number_v1": 4
+    },
+    "wikidata_candidates": 2,
+    "subunit_candidates": 180,
+    "search_provider": null
+  },
+  "jobs_feed": {
+    "scanned": true,
+    "pages": 89,
+    "items": 87553,
+    "active_ads": 8924,
+    "truncated": false,
+    "error": null,
+    "lookback_days": 45
+  },
+  "availability_totals": {
+    "available": 8176,
+    "not_available": 5758,
+    "blocked": 7,
+    "not_applicable": 0,
+    "ambiguous": 51,
+    "failed": 8
+  },
+  "claims_by_field": {
+    "annual_account_years": {
+      "available": 1000
+    },
+    "business_activity": {
+      "available": 994
+    },
+    "business_address": {
+      "available": 992
+    },
+    "careers_page": {
+      "ambiguous": 27,
+      "available": 5
+    },
+    "cleaning_approval": {
+      "not_available": 989,
+      "available": 11
+    },
+    "contact_email": {
+      "ambiguous": 27,
+      "available": 16
+    },
+    "contact_page": {
+      "ambiguous": 27,
+      "available": 39
+    },
+    "employees": {
+      "not_available": 856,
+      "available": 144
+    },
+    "financials_latest": {
+      "available": 997,
+      "not_available": 1,
+      "failed": 2
+    },
+    "food_safety_inspections": {
+      "not_available": 981,
+      "available": 19
+    },
+    "founded": {
+      "available": 985
+    },
+    "industry": {
+      "available": 994,
+      "not_available": 6
+    },
+    "job_postings": {
+      "not_available": 995,
+      "available": 5
+    },
+    "last_submitted_annual_accounts": {
+      "available": 994
+    },
+    "legal_form": {
+      "available": 1000
+    },
+    "legal_name": {
+      "available": 1000
+    },
+    "legal_status": {
+      "available": 994
+    },
+    "municipality": {
+      "available": 990,
+      "not_available": 10
+    },
+    "news_page": {
+      "ambiguous": 27,
+      "available": 12
+    },
+    "occupational_health_approval": {
+      "not_available": 1000
+    },
+    "official_website": {
+      "not_available": 856,
+      "available": 80,
+      "ambiguous": 51,
+      "blocked": 7,
+      "failed": 6
+    },
+    "postal_address": {
+      "available": 241
+    },
+    "recent_registry_changes": {
+      "available": 1000
+    },
+    "registered_in_business_register": {
+      "available": 994
+    },
+    "registered_locations": {
+      "available": 743,
+      "not_available": 257
+    },
+    "registered_on": {
+      "available": 994
+    },
+    "registered_purpose": {
+      "available": 960
+    },
+    "registered_website": {
+      "not_available": 894,
+      "available": 106
+    },
+    "registry_contact_email": {
+      "available": 190
+    },
+    "role_holders": {
+      "available": 994,
+      "not_available": 6
+    },
+    "secondary_industries": {
+      "available": 15
+    },
+    "sector": {
+      "available": 981
+    },
+    "social_links": {
+      "ambiguous": 27,
+      "not_available": 35,
+      "available": 18
+    },
+    "vat_registered": {
+      "available": 994
+    },
+    "vat_registered_on": {
+      "available": 507
+    },
+    "website_title": {
+      "available": 80
+    }
+  },
+  "modules": {
+    "accounting_obligation": {
+      "available": 1000
+    },
+    "cleaning_register": {
+      "not_available": 989,
+      "available": 11
+    },
+    "financial_history": {
+      "available": 1000
+    },
+    "financials": {
+      "available": 997,
+      "not_available": 1,
+      "failed": 2
+    },
+    "food_inspections": {
+      "not_available": 981,
+      "available": 19
+    },
+    "group": {
+      "not_available": 930,
+      "available": 70
+    },
+    "jobs": {
+      "not_available": 995,
+      "available": 5
+    },
+    "locations": {
+      "available": 1000
+    },
+    "ohs_register": {
+      "not_available": 1000
+    },
+    "registry": {
+      "available": 1000
+    },
+    "registry_live": {
+      "available": 1000
+    },
+    "roles": {
+      "available": 994,
+      "not_available": 6
+    },
+    "updates": {
+      "available": 1000
+    },
+    "website": {
+      "not_available": 856,
+      "available": 80,
+      "ambiguous": 51,
+      "blocked": 7,
+      "failed": 6
+    }
+  },
+  "changes_total": 0,
+  "changes_by_field": {}
+}
