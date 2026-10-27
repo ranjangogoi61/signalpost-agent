@@ -29,11 +29,13 @@ The agent reads whatever batch it is given; it assumes no company count. The ref
 | Language models | None |
 | Paid or keyed APIs | None by default. Optional: Brave Search API, used only if the operator sets `BRAVE_SEARCH_API_KEY`; about $0.005 per query, at most one query per company without a registry website, capped at $8 per 100 companies and reported in the run report |
 | Registry data | data.brreg.no (Enhetsregisteret, roles, subunits; Regnskapsregisteret accounts), NLOD 2.0 |
-| Job ads | NAV Arbeidsplassen job vacancy feed (pam-stilling-feed.nav.no), NAV's public experiment token or an operator-supplied `NAV_FEED_TOKEN`; free under NAV's terms; active ads only, matched by exact organisation number, no descriptions or contact details kept |
+| Job ads | NAV Arbeidsplassen job vacancy feed (pam-stilling-feed.nav.no), NAV's public experiment token or an operator-supplied `NAV_FEED_TOKEN`; free under NAV's terms; active ads only, matched by the exact organisation number of the company or one of its registered subunits, no descriptions or contact details kept |
+| Open registers | Arbeidstilsynet renholdsregister and BHT register (XML), Mattilsynet smilefjes inspections (CSV), Enhetsregisteret update feed, OpenStreetMap Overpass (ODbL, website candidates only), Wikidata (CC0, website candidates only): one request each per run, joined on the exact organisation number |
 | Company websites | Registry-linked or discovered by exact organisation number; robots.txt respected |
 | LinkedIn / Meta / Indeed / search engines / directories | Not accessed |
 | Expected third-party cost | $0 per 100-company run without a key; at most about $0.5 per 100 companies with one |
-| Measured on CI (100 companies, live) | about 920 outbound requests (retries and redirects counted, about 95 of them the NAV feed scan) and about 410 s, inside the 2,000 request / 45 minute budget. The `--bulk` snapshot path on the same 100 companies: 643 requests, about 235 s |
+| Measured on CI (100 companies, live) | about 1,550 outbound requests (retries and redirects counted) and about 410-480 s, inside the 2,000 request / 45 minute budget; a repeat run reports 0 changes |
+| Measured on CI (1,000 companies, live, same command) | 1,000/1,000 envelopes in input order, all validation checks passed, 14,493 requests (about 1,450 per 100) and 3,749 s (about 375 s per 100), no request refused by the budget |
 
 ## What it publishes
 
@@ -59,7 +61,7 @@ CI runs on every push to `dev`: unit tests (no network allowed), a live 100-comp
 
 ## Synthesis and UX
 
-Each envelope has a deterministic, source-cited `synthesis` (facts plus a plain-language assessment such as profit or loss, negative equity, winding-down flags and public activity, which never states a number that is not in a cited claim), and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare (with a source link on every compared value and a "show only differences" filter) and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch.
+Each envelope has a deterministic, source-cited `synthesis` (facts plus a plain-language assessment such as profit or loss, negative equity, winding-down flags and public activity, which never states a number that is not in a cited claim), and each run writes an offline mobile-ready viewer (`site/index.html`) to find, compare (with a source link on every compared value and a "show only differences" filter) and verify companies. A public demo built from the 100-company smoke batch (person names hidden) is `index.html` on the `smoke-results` branch, and the 1,000 profiles of the scale run are `profiles-1000.html` on the `scale-results` branch (person names hidden; search by name, number, place or industry, filters, compare, sources).
 
 ## Smoke result and report
 
@@ -67,8 +69,9 @@ The 100-company live run and its refresh re-run are produced by the `ci` workflo
 
 ## Known limits (honest list)
 
-* Websites are the weakest field: registry coverage of websites is low, and discovery by exact organisation number finds only a few percent of the rest.
-* No news, review, jobs or social collection from third-party platforms.
+* Websites are the weakest field: in the 1,000-company run 80 websites (8%) were proven by the exact organisation number; 51 registry websites stayed `ambiguous` because none of their pages prints the number.
+* Active job ads come only from NAV's open feed (5 of 1,000 companies in the scale run); FINN.no has no open API.
+* No news, review or social collection from third-party platforms; Brønnøysund announcements are closed to robots and their feed is paid.
 * The evaluator's exact invocation was not published; `scripts/run_signalpost.py` accepts the reference kit's flags as a superset.
 
 ## Tests
