@@ -1,0 +1,122 @@
+{
+  "run_id": "ci-smoke",
+  "started_at": "2026-10-27T14:05:47.319787Z",
+  "completed_at": "2026-10-27T14:13:04.932994Z",
+  "expected_count": 100,
+  "emitted_envelopes": 100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "financial_history",
+    "roles",
+    "group",
+    "locations",
+    "updates",
+    "cleaning_register",
+    "ohs_register",
+    "food_inspections",
+    "website",
+    "jobs"
+  ],
+  "registry_anchor": {
+    "bulk_used": false,
+    "from_bulk": 0,
+    "from_live_batch": 100,
+    "from_direct": 0,
+    "missing": 0
+  },
+  "operations": {
+    "requests": 1561,
+    "requests_by_phase": {
+      "jobs_scan": 90,
+      "updates": 1,
+      "jobs_confirm": 0,
+      "official": 500,
+      "open_registers": 4,
+      "wikidata": 1,
+      "website": 70,
+      "discovery": 774
+    },
+    "requests_refused_by_budget": 0,
+    "open_registers": {
+      "renhold": {
+        "ok": true,
+        "entries": 7992,
+        "error": null
+      },
+      "bht": {
+        "ok": true,
+        "entries": 128,
+        "error": null
+      },
+      "smilefjes": {
+        "ok": true,
+        "entries": 7985,
+        "error": null
+      },
+      "osm": {
+        "ok": false,
+        "entries": null,
+        "error": "HTTPError: HTTP Error 502: Bad Gateway"
+      }
+    },
+    "official_retries": {
+      "attempted": 0,
+      "recovered": 0
+    },
+    "discovery_cap_per_company": 9,
+    "bytes": 41349266,
+    "runtime_ms": 437613,
+    "p50_ms": 618,
+    "p95_ms": 1505,
+    "third_party_cost_usd": 0.0,
+    "search_queries": 0
+  },
+  "budget": {
+    "max_requests": 1900,
+    "max_seconds": 2400,
+    "exhausted": false
+  },
+  "discovery": {
+    "attempted": 93,
+    "verified": 4,
+    "method": "domain_guess_exact_org_number_v1",
+    "verified_by_method": {
+      "domain_guess_exact_org_number_v1": 3
+    },
+    "wikidata_candidates": 0,
+    "subunit_candidates": 16,
+    "search_provider": null
+  },
+  "jobs_feed": {
+    "scanned": true,
+    "pages": 89,
+    "items": 87789,
+    "active_ads": 8971,
+    "truncated": false,
+    "error": null,
+    "lookback_days": 45
+  },
+  "availability_totals": {
+    "available": 815,
+    "not_available": 579,
+    "blocked": 1,
+    "not_applicable": 0,
+    "ambiguous": 4,
+    "failed": 1
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "same_order_as_input": true,
+      "all_modules_have_six_state_availability": true,
+      "every_available_claim_has_evidence": true,
+      "synthesis_cites_existing_evidence": true,
+      "no_value_on_unavailable_claim": true,
+      "matches_expected_count": true
+    }
+  }
+}

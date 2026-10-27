@@ -1,0 +1,46 @@
+{
+  "companies_compared": 100,
+  "same": {
+    "annual_account_years": 100,
+    "business_activity": 100,
+    "business_address": 100,
+    "financials_latest": 100,
+    "founded": 100,
+    "industry": 100,
+    "last_submitted_annual_accounts": 100,
+    "legal_form": 100,
+    "legal_name": 100,
+    "legal_status": 100,
+    "municipality": 100,
+    "recent_registry_changes": 82,
+    "registered_in_business_register": 100,
+    "registered_locations": 74,
+    "registered_on": 100,
+    "registered_purpose": 99,
+    "role_holders": 100,
+    "sector": 98,
+    "vat_registered": 100,
+    "postal_address": 25,
+    "vat_registered_on": 41,
+    "registry_contact_email": 21,
+    "official_website": 2,
+    "registered_website": 7,
+    "website_title": 2,
+    "employees": 10,
+    "food_safety_inspections": 1,
+    "cleaning_approval": 1
+  },
+  "differ": {
+    "recent_registry_changes": 18
+  },
+  "only_in_first_run": {
+    "contact_email": 2,
+    "contact_page": 2,
+    "news_page": 2,
+    "official_website": 3,
+    "social_links": 2,
+    "website_title": 3
+  },
+  "only_in_second_run": {},
+  "core_fields_over_tolerance": {}
+}
